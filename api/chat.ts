@@ -4,10 +4,10 @@ type PathType = "medicine" | "lifestyle" | null;
 
 const apiKey = process.env.GEMINI_API_KEY as string | undefined;
 
-// This log is only visible in Vercel logs – useful for debugging
+// We'll log once on cold start – only visible in Vercel logs
 if (!apiKey) {
   console.warn(
-    "GEMINI_API_KEY is not set. The /api/chat endpoint will not work until you add it in Vercel environment variables."
+    "GEMINI_API_KEY is not set. Gemini model will not be initialised."
   );
 }
 
@@ -131,15 +131,27 @@ HOW TO RESPOND:
 
 // Vercel serverless function handler
 export default async function handler(req: any, res: any) {
+  // Debug GET: let us quickly see if the server can see GEMINI_API_KEY
+  if (req.method === "GET") {
+    res.status(200).json({
+      ok: true,
+      hasApiKey: !!apiKey,
+    });
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed. Use POST." });
     return;
   }
 
+  // If model is not initialised, explain that to the user instead of 500
   if (!model) {
-    res.status(500).json({
-      error:
-        "GEMINI_API_KEY is not set on the server, or the model could not be initialised. Please configure GEMINI_API_KEY in Vercel.",
+    res.status(200).json({
+      response:
+        "⚠️ Medsafe server configuration issue: the Gemini model is not initialised. " +
+        "This usually means the GEMINI_API_KEY environment variable is missing or invalid on the server. " +
+        "Please ask the developer to set GEMINI_API_KEY correctly in Vercel and redeploy.",
     });
     return;
   }
@@ -172,9 +184,12 @@ export default async function handler(req: any, res: any) {
     res.status(200).json({ response: text });
   } catch (error: any) {
     console.error("Gemini /api/chat error:", error);
-    res.status(500).json({
-      error: "Failed to generate response from Gemini.",
-      details: error?.message || "Unknown error",
+    // Return 200 with a clear message instead of 500
+    res.status(200).json({
+      response:
+        "⚠️ I had a problem talking to the Gemini model, so I couldn't generate a full answer.\n\n" +
+        "Technical details for the developer:\n" +
+        (error?.message || "Unknown error"),
     });
   }
 }
