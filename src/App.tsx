@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { Minus, Plus, Droplet, Pill, Heart, ChevronLeft, CheckCircle2, Send, Paperclip, Mic, AlertTriangle } from 'lucide-react';
+import {
+  Minus,
+  Plus,
+  Droplet,
+  Pill,
+  Heart,
+  ChevronLeft,
+  CheckCircle2,
+  Send,
+  Paperclip,
+  Mic,
+  AlertTriangle,
+} from 'lucide-react';
 
 type FormStep = 'age-verification' | 'patient-info' | 'chatbot' | 'lifestyle';
 
@@ -9,6 +21,22 @@ interface ChatMessage {
   emotion?: 'supportive' | 'urgent' | 'reassuring' | 'celebratory';
 }
 
+interface FormData {
+  symptoms: string;
+  symptomDuration: number;
+  symptomUnit: string;
+  mealsPerDay: number;
+  waterIntake: number;
+  lastMeal: string;
+  selectedFoods: string[];
+  additionalInfo: string;
+  exerciseFrequency: string;
+  sleepHours: number;
+  stressLevel: string;
+  smokingStatus: string;
+  alcoholConsumption: string;
+}
+
 export default function App() {
   const [currentStep, setCurrentStep] = useState<FormStep>('age-verification');
   const [selectedOption, setSelectedOption] = useState<'medicine' | 'lifestyle' | null>(null);
@@ -16,22 +44,22 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationContext, setConversationContext] = useState<any>({});
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  
-  const [formData, setFormData] = useState({
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const [formData, setFormData] = useState<FormData>({
     symptoms: '',
     symptomDuration: 1,
     symptomUnit: 'days',
     mealsPerDay: 0,
     waterIntake: 0,
     lastMeal: '',
-    selectedFoods: [] as string[],
+    selectedFoods: [],
     additionalInfo: '',
     exerciseFrequency: 'never',
     sleepHours: 7,
     stressLevel: 'moderate',
     smokingStatus: 'non-smoker',
-    alcoholConsumption: 'none'
+    alcoholConsumption: 'none',
   });
 
   useEffect(() => {
@@ -40,95 +68,129 @@ export default function App() {
 
   const detectEmergencySymptoms = (text: string): boolean => {
     const emergencyKeywords = [
-      'chest pain', 'cant breathe', 'shortness of breath', 'severe pain',
-      'suicide', 'kill myself', 'confused', 'slurred speech', 'seizure',
-      'unconscious', 'severe bleeding', 'heart attack', 'stroke'
+      'chest pain',
+      'cant breathe',
+      'shortness of breath',
+      'severe pain',
+      'suicide',
+      'kill myself',
+      'confused',
+      'slurred speech',
+      'seizure',
+      'unconscious',
+      'severe bleeding',
+      'heart attack',
+      'stroke',
     ];
-    return emergencyKeywords.some(keyword => text.toLowerCase().includes(keyword));
+    return emergencyKeywords.some((keyword) => text.toLowerCase().includes(keyword));
   };
 
-  const detectEmotionalTone = (text: string): 'worried' | 'frustrated' | 'tired' | 'neutral' => {
+  const detectEmotionalTone = (
+    text: string
+  ): 'worried' | 'frustrated' | 'tired' | 'neutral' => {
     const worriedWords = ['worried', 'scared', 'afraid', 'anxious', 'nervous', 'concerned'];
     const frustratedWords = ['frustrated', 'angry', 'annoyed', 'upset', 'fed up'];
     const tiredWords = ['exhausted', 'tired', 'fatigue', 'drained', 'weak'];
-    
+
     const lowerText = text.toLowerCase();
-    if (worriedWords.some(w => lowerText.includes(w))) return 'worried';
-    if (frustratedWords.some(w => lowerText.includes(w))) return 'frustrated';
-    if (tiredWords.some(w => lowerText.includes(w))) return 'tired';
+    if (worriedWords.some((w) => lowerText.includes(w))) return 'worried';
+    if (frustratedWords.some((w) => lowerText.includes(w))) return 'frustrated';
+    if (tiredWords.some((w) => lowerText.includes(w))) return 'tired';
     return 'neutral';
   };
 
+  // This function is no longer used to generate the main reply,
+  // but we keep it in case you want local, non-Gemini responses later.
   const generateEmpathicResponse = (userMessage: string, context: any): string => {
     const emotion = detectEmotionalTone(userMessage);
-    
+
     if (detectEmergencySymptoms(userMessage)) {
-      return "⚠️ Your symptoms sound serious and need immediate attention. Please consult a doctor or visit a healthcare facility right away. Your safety is the top priority.";
+      return '⚠️ Your symptoms sound serious and need immediate attention. Please consult a doctor or visit a healthcare facility right away. Your safety is the top priority.';
     }
 
     let response = '';
-    
+
     if (emotion === 'worried') {
-      response += "I can sense you're feeling worried, and that's completely understandable when you're not feeling well. You're taking the right steps by reaching out. ";
+      response +=
+        "I can sense you're feeling worried, and that's completely understandable when you're not feeling well. You're taking the right steps by reaching out. ";
     } else if (emotion === 'frustrated') {
-      response += "I hear your frustration, and I'm here to help. It's okay to feel this way. Let's work through this together. ";
+      response +=
+        "I hear your frustration, and I'm here to help. It's okay to feel this way. Let's work through this together. ";
     } else if (emotion === 'tired') {
-      response += "I know you're feeling exhausted right now. Your body needs rest, and it's okay to take it slow. ";
+      response +=
+        "I know you're feeling exhausted right now. Your body needs rest, and it's okay to take it slow. ";
     }
 
     if (selectedOption === 'medicine') {
       if (!context.medicineExplained) {
-        response += "\n\n💊 Based on what you've shared, let me explain some options that might help:\n\n";
-        
-        if (formData.symptoms.toLowerCase().includes('fever') || formData.symptoms.toLowerCase().includes('headache')) {
-          response += "**Paracetamol (Acetaminophen)** could be helpful here. It works by reducing fever and relieving mild to moderate pain. People commonly use it for viral fever, headaches, and body aches.\n\n";
-          response += "**How to use it safely:**\n";
-          response += "• Adults: 500-1000mg every 6 hours\n";
-          response += "• Maximum: 4000mg (4 grams) in 24 hours\n";
-          response += "• Take with water, with or without food\n\n";
-          response += "**Expected timeline:** Most people start feeling relief within 30-60 minutes, and with rest, symptoms typically improve within 2-3 days. Full recovery usually takes 5-7 days for viral illnesses.\n\n";
+        response += '\n\n💊 Based on what you\'ve shared, let me explain some options that might help:\n\n';
+
+        if (
+          formData.symptoms.toLowerCase().includes('fever') ||
+          formData.symptoms.toLowerCase().includes('headache')
+        ) {
+          response +=
+            '**Paracetamol (Acetaminophen)** could be helpful here. It works by reducing fever and relieving mild to moderate pain. People commonly use it for viral fever, headaches, and body aches.\n\n';
+          response += '**How to use it safely:**\n';
+          response += '• Adults: 500-1000mg every 6 hours\n';
+          response += '• Maximum: 4000mg (4 grams) in 24 hours\n';
+          response += '• Take with water, with or without food\n\n';
+          response +=
+            '**Expected timeline:** Most people start feeling relief within 30-60 minutes, and with rest, symptoms typically improve within 2-3 days. Full recovery usually takes 5-7 days for viral illnesses.\n\n';
         } else {
-          response += "For your symptoms, over-the-counter options might help, depending on what you're experiencing. Could you tell me more about what's bothering you most?\n\n";
+          response +=
+            "For your symptoms, over-the-counter options might help, depending on what you're experiencing. Could you tell me more about what's bothering you most?\n\n";
         }
-        
-        response += "**Important reminder:** This information is for educational purposes only. If symptoms persist beyond 3-4 days, worsen, or you have any concerns, please consult a healthcare professional for personalized advice. 🌿";
-        
-        setConversationContext({...context, medicineExplained: true});
+
+        response +=
+          '**Important reminder:** This information is for educational purposes only. If symptoms persist beyond 3-4 days, worsen, or you have any concerns, please consult a healthcare professional for personalized advice. 🌿';
+
+        setConversationContext({ ...context, medicineExplained: true });
       } else {
         response += "That's a smart question! " + getFollowUpMedicineResponse(userMessage, context);
       }
     } else if (selectedOption === 'lifestyle') {
       if (!context.lifestyleAdviceGiven) {
-        response += "\n\n🌿 Let me share some practical lifestyle changes that can help:\n\n";
-        
-        response += "**Hydration** 💧\n";
+        response += '\n\n🌿 Let me share some practical lifestyle changes that can help:\n\n';
+
+        response += '**Hydration** 💧\n';
         response += `Your current intake: ${formData.waterIntake}L per day. `;
         if (formData.waterIntake < 2) {
-          response += "Try gradually increasing to 2-3L daily. This helps with fatigue, headaches, and overall energy.\n";
-          response += "**Expected result:** You should notice improved focus and reduced fatigue within 2-3 days.\n\n";
+          response +=
+            'Try gradually increasing to 2-3L daily. This helps with fatigue, headaches, and overall energy.\n';
+          response +=
+            '**Expected result:** You should notice improved focus and reduced fatigue within 2-3 days.\n\n';
         } else {
           response += "That's great! You're staying well hydrated. 👏\n\n";
         }
-        
-        response += "**Sleep** 😴\n";
+
+        response += '**Sleep** 😴\n';
         response += `Current: ${formData.sleepHours} hours. `;
         if (formData.sleepHours < 7) {
-          response += "Aim for 7-9 hours per night. Good sleep boosts immunity and mood.\n";
-          response += "**Expected result:** Within a week, you'll likely feel more energized and resilient.\n\n";
+          response += 'Aim for 7-9 hours per night. Good sleep boosts immunity and mood.\n';
+          response +=
+            '**Expected result:** Within a week, you\'ll likely feel more energized and resilient.\n\n';
         } else {
           response += "That's a healthy amount! Keep it up. 👏\n\n";
         }
-        
-        response += "**Exercise** 🏃\n";
-        if (formData.exerciseFrequency === 'never' || formData.exerciseFrequency === 'rarely') {
-          response += "Starting with just 15-20 minutes of light walking daily can significantly improve your energy and mood.\n";
-          response += "**Expected result:** You'll start feeling more energetic within 3-5 days.\n\n";
+
+        response += '**Exercise** 🏃\n';
+        if (
+          formData.exerciseFrequency === 'never' ||
+          formData.exerciseFrequency === 'rarely'
+        ) {
+          response +=
+            'Starting with just 15-20 minutes of light walking daily can significantly improve your energy and mood.\n';
+          response +=
+            '**Expected result:** You\'ll start feeling more energetic within 3-5 days.\n\n';
         }
-        
-        response += "**Remember:** Small, consistent changes work better than big sudden shifts. You're doing great by paying attention to your health! 💚\n\n";
-        response += "*This guidance is educational. For persistent concerns, please consult a healthcare provider.*";
-        
-        setConversationContext({...context, lifestyleAdviceGiven: true});
+
+        response +=
+          '**Remember:** Small, consistent changes work better than big sudden shifts. You\'re doing great by paying attention to your health! 💚\n\n';
+        response +=
+          '*This guidance is educational. For persistent concerns, please consult a healthcare provider.*';
+
+        setConversationContext({ ...context, lifestyleAdviceGiven: true });
       } else {
         response += getFollowUpLifestyleResponse(userMessage, context);
       }
@@ -139,88 +201,139 @@ export default function App() {
 
   const getFollowUpMedicineResponse = (message: string, context: any): string => {
     const lowerMsg = message.toLowerCase();
-    
+
     if (lowerMsg.includes('side effect')) {
-      return "Common side effects of Paracetamol are rare but can include nausea or allergic reactions. The most important thing is never to exceed the maximum dose (4g/day) as it can harm your liver. If you notice anything unusual, stop taking it and consult a doctor. You're being smart by asking! 👍";
+      return 'Common side effects of Paracetamol are rare but can include nausea or allergic reactions. The most important thing is never to exceed the maximum dose (4g/day) as it can harm your liver. If you notice anything unusual, stop taking it and consult a doctor. You\'re being smart by asking! 👍';
     }
-    
+
     if (lowerMsg.includes('how long') || lowerMsg.includes('when')) {
-      return "Most people feel relief within 30-60 minutes of taking the medication. For full recovery from your symptoms, it typically takes 5-7 days with proper rest and care. Keep monitoring how you feel! 🌟";
+      return 'Most people feel relief within 30-60 minutes of taking the medication. For full recovery from your symptoms, it typically takes 5-7 days with proper rest and care. Keep monitoring how you feel! 🌟';
     }
-    
+
     if (lowerMsg.includes('alternative') || lowerMsg.includes('natural')) {
-      return "Natural alternatives include: rest (your body heals during sleep), staying hydrated (helps flush out toxins), and warm compress for aches. Ginger tea can help with nausea. These work well alongside or instead of medication for mild symptoms. You're taking wonderful care of yourself! 💚";
+      return 'Natural alternatives include: rest (your body heals during sleep), staying hydrated (helps flush out toxins), and warm compress for aches. Ginger tea can help with nausea. These work well alongside or instead of medication for mild symptoms. You\'re taking wonderful care of yourself! 💚';
     }
-    
+
     return "That's a great question. I want to make sure I give you accurate information. For specific concerns about medications, it's best to check with a pharmacist or doctor who can consider your full health picture. Is there anything else about general wellness I can help with? 😊";
   };
 
   const getFollowUpLifestyleResponse = (message: string, context: any): string => {
     const lowerMsg = message.toLowerCase();
-    
+
     if (lowerMsg.includes('sleep') || lowerMsg.includes('insomnia')) {
-      return "For better sleep: avoid screens 1 hour before bed, keep your room cool and dark, and try to go to bed at the same time each night. Chamomile tea or light stretching can help you wind down. Most people see improvements within 3-5 days of consistent routine. You've got this! 😴✨";
+      return 'For better sleep: avoid screens 1 hour before bed, keep your room cool and dark, and try to go to bed at the same time each night. Chamomile tea or light stretching can help you wind down. Most people see improvements within 3-5 days of consistent routine. You\'ve got this! 😴✨';
     }
-    
+
     if (lowerMsg.includes('stress') || lowerMsg.includes('anxious')) {
-      return "Managing stress is so important. Try: 5-minute breathing exercises (inhale 4 counts, hold 4, exhale 4), short walks outdoors, or journaling your thoughts. Even 10 minutes daily can reduce stress significantly. You should feel calmer within a week. You're doing great by addressing this! 🌿";
+      return 'Managing stress is so important. Try: 5-minute breathing exercises (inhale 4 counts, hold 4, exhale 4), short walks outdoors, or journaling your thoughts. Even 10 minutes daily can reduce stress significantly. You should feel calmer within a week. You\'re doing great by addressing this! 🌿';
     }
-    
+
     if (lowerMsg.includes('diet') || lowerMsg.includes('food')) {
-      return "Focus on whole foods: fruits, vegetables, lean proteins, and whole grains. Eat regular meals (3 balanced meals or 5 small ones). Avoid excessive caffeine and sugar as they can affect energy and mood. You'll likely notice better energy within 3-4 days. That's a smart focus! 🥗";
+      return 'Focus on whole foods: fruits, vegetables, lean proteins, and whole grains. Eat regular meals (3 balanced meals or 5 small ones). Avoid excessive caffeine and sugar as they can affect energy and mood. You\'ll likely notice better energy within 3-4 days. That\'s a smart focus! 🥗';
     }
-    
+
     return "That's a thoughtful approach! Keep making small, consistent changes. Remember, progress isn't always linear, and every small step counts. Would you like tips on any specific area of your wellness? 💪😊";
+  };
+
+  // NEW: Start the conversation by sending form data to Gemini
+  const startChatWithGemini = async (mode: 'medicine' | 'lifestyle') => {
+    // Save context so we can reuse it later
+    setConversationContext((prev: any) => ({
+      ...prev,
+      pathType: mode,
+      patientInfo: formData,
+    }));
+
+    // Navigate to chatbot and show loader
+    setCurrentStep('chatbot');
+    setChatMessages([]);
+    setIsLoading(true);
+
+    try {
+      const initialMessage =
+        mode === 'medicine'
+          ? `The user has just filled a symptom form.
+Please:
+1) Greet them warmly and acknowledge how they might be feeling.
+2) Summarise their symptoms and how long they have been present.
+3) Explain what types of over-the-counter medicines are commonly used in general for these symptoms, how they work, and typical onset times.
+4) Suggest simple home-care steps (fluids, rest, light clothing, etc.).
+5) List warning signs when they should seek urgent or in-person medical care.
+6) Remind them to always read the package instructions carefully and consult a doctor or pharmacist before taking any medicine if they are unsure.`
+          : `The user has just filled a lifestyle and wellness questionnaire.
+Please:
+1) Summarise their current habits (sleep, water intake, meals, stress, exercise, smoking, alcohol).
+2) Suggest small, realistic changes they can start with.
+3) Explain roughly how soon people often start to feel benefits.
+4) Encourage consistency and self-kindness.
+5) Remind them this is general wellness guidance and they should talk to a healthcare professional for any medical concerns.`;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: initialMessage,
+          pathType: mode,
+          patientInfo: formData,
+          chatHistory: [],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+
+      setChatMessages([
+        {
+          role: 'bot',
+          message: data.response,
+          emotion: 'supportive',
+        },
+      ]);
+    } catch (error) {
+      console.error('Initial chat error:', error);
+      setChatMessages([
+        {
+          role: 'bot',
+          message:
+            "I'm having a moment of trouble connecting. Please try again — I'm here to help! 💙",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAgeConfirmation = (isOver18: boolean) => {
     if (isOver18) {
       setCurrentStep('patient-info');
     } else {
-      alert("You must be 18+ to use this service. Please seek guidance from a parent, guardian, or healthcare professional.");
+      alert(
+        'You must be 18+ to use this service. Please seek guidance from a parent, guardian, or healthcare professional.'
+      );
     }
   };
 
+  // UPDATED: use startChatWithGemini for the medicine path
   const handleNext = () => {
     if (currentStep === 'patient-info' && selectedOption) {
       if (selectedOption === 'medicine') {
-        setConversationContext({
-          symptoms: formData.symptoms,
-          duration: `${formData.symptomDuration} ${formData.symptomUnit}`,
-          meals: formData.mealsPerDay,
-          water: formData.waterIntake,
-          additionalInfo: formData.additionalInfo
-        });
-        
-        const greeting = "Hello! I'm sorry you're not feeling well. I'm here to help you understand your options and feel better. You're taking a smart step by seeking information. 💙\n\nI see you're experiencing " + 
-          (formData.symptoms || "some symptoms") + 
-          ` for ${formData.symptomDuration} ${formData.symptomUnit}. Let me provide you with some helpful information about medicines that might help.\n\nBut first, tell me — what's bothering you the most right now?`;
-        
-        setChatMessages([{ role: 'bot', message: greeting, emotion: 'supportive' }]);
-        setCurrentStep('chatbot');
+        // Directly start the chat with Gemini, using all current form data
+        startChatWithGemini('medicine');
       } else if (selectedOption === 'lifestyle') {
+        // Ask the extra lifestyle questions first
         setCurrentStep('lifestyle');
       }
     }
   };
 
+  // UPDATED: lifestyle path also starts Gemini chat with full info
   const handleContinueToChatbot = () => {
-    setConversationContext({
-      symptoms: formData.symptoms,
-      duration: `${formData.symptomDuration} ${formData.symptomUnit}`,
-      exercise: formData.exerciseFrequency,
-      sleep: formData.sleepHours,
-      stress: formData.stressLevel,
-      meals: formData.mealsPerDay,
-      water: formData.waterIntake
-    });
-    
-    const greeting = "Hello! I'm here to help you build healthier habits and feel your best. You're already doing great by paying attention to your wellness! 🌿\n\n" +
-      `I can see you're getting ${formData.sleepHours} hours of sleep and drinking ${formData.waterIntake}L of water daily. ` +
-      "Let's talk about what's on your mind. What aspect of your lifestyle would you most like to improve?";
-    
-    setChatMessages([{ role: 'bot', message: greeting, emotion: 'supportive' }]);
-    setCurrentStep('chatbot');
+    startChatWithGemini('lifestyle');
   };
 
   const handleBack = () => {
@@ -248,7 +361,6 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      // Call Gemini API through Vercel serverless function
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -259,8 +371,8 @@ export default function App() {
           context: conversationContext,
           pathType: selectedOption,
           patientInfo: formData,
-          chatHistory: chatMessages.slice(-10) // Last 10 messages for context
-        })
+          chatHistory: chatMessages.slice(-10),
+        }),
       });
 
       if (!response.ok) {
@@ -269,36 +381,47 @@ export default function App() {
 
       const data = await response.json();
       const botResponse = data.response;
-      
-      setChatMessages(prev => [...prev, { 
-        role: 'bot', 
-        message: botResponse,
-        emotion: detectEmergencySymptoms(currentInput) ? 'urgent' : 'supportive'
-      }]);
 
-      // Update context if needed
-      setConversationContext(prev => ({
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          message: botResponse,
+          emotion: detectEmergencySymptoms(currentInput) ? 'urgent' : 'supportive',
+        },
+      ]);
+
+      setConversationContext((prev: any) => ({
         ...prev,
         lastUserMessage: currentInput,
-        messageCount: (prev.messageCount || 0) + 1
+        messageCount: (prev?.messageCount || 0) + 1,
       }));
     } catch (error) {
       console.error('Chat error:', error);
-      setChatMessages(prev => [...prev, { 
-        role: 'bot', 
-        message: "I'm having a moment of trouble connecting. Please try again — I'm here to help! 💙" 
-      }]);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          message: "I'm having a moment of trouble connecting. Please try again — I'm here to help! 💙",
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleIncrement = (field: 'symptomDuration' | 'mealsPerDay') => {
-    setFormData(prev => ({ ...prev, [field]: (prev as any)[field] + 1 }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: prev[field] + 1,
+    }));
   };
 
   const handleDecrement = (field: 'symptomDuration' | 'mealsPerDay') => {
-    setFormData(prev => ({ ...prev, [field]: Math.max(0, (prev as any)[field] - 1) }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: Math.max(0, prev[field] - 1),
+    }));
   };
 
   const getMealCardColor = () => {
@@ -321,15 +444,17 @@ export default function App() {
   ];
 
   const toggleFood = (foodName: string) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const isSelected = prev.selectedFoods.includes(foodName);
       if (isSelected) {
-        return { ...prev, selectedFoods: prev.selectedFoods.filter(f => f !== foodName) };
+        return { ...prev, selectedFoods: prev.selectedFoods.filter((f) => f !== foodName) };
       } else {
         return { ...prev, selectedFoods: [...prev.selectedFoods, foodName] };
       }
     });
   };
+
+  // --------- RENDERING ---------
 
   if (currentStep === 'age-verification') {
     return (
@@ -339,16 +464,20 @@ export default function App() {
             <h1 className="text-4xl font-bold text-purple-700 mb-2">Medsafe</h1>
             <p className="text-gray-600">Your Health Companion</p>
           </div>
-          
+
           <div className="mb-6">
             <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded-lg mb-4">
               <p className="text-purple-900 font-medium">Age Verification Required</p>
-              <p className="text-sm text-purple-700 mt-1">This service is intended for users 18 years and older.</p>
+              <p className="text-sm text-purple-700 mt-1">
+                This service is intended for users 18 years and older.
+              </p>
             </div>
-            
-            <p className="text-gray-700 text-center mb-6">Are you 18 years of age or older?</p>
+
+            <p className="text-gray-700 text-center mb-6">
+              Are you 18 years of age or older?
+            </p>
           </div>
-          
+
           <div className="space-y-3">
             <button
               onClick={() => handleAgeConfirmation(true)}
@@ -363,9 +492,10 @@ export default function App() {
               No, I am under 18
             </button>
           </div>
-          
+
           <p className="text-xs text-gray-500 text-center mt-6">
-            By continuing, you confirm you meet the age requirement. If you are under 18, please seek guidance from a parent, guardian, or healthcare professional.
+            By continuing, you confirm you meet the age requirement. If you are under 18, please seek
+            guidance from a parent, guardian, or healthcare professional.
           </p>
         </div>
       </div>
@@ -378,9 +508,13 @@ export default function App() {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <button 
+              <button
                 onClick={handleBack}
-                className={`p-2 rounded-lg ${selectedOption === 'medicine' ? 'text-blue-700 hover:bg-blue-100' : 'text-teal-700 hover:bg-teal-100'}`}
+                className={`p-2 rounded-lg ${
+                  selectedOption === 'medicine'
+                    ? 'text-blue-700 hover:bg-blue-100'
+                    : 'text-teal-700 hover:bg-teal-100'
+                }`}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -408,27 +542,34 @@ export default function App() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-amber-800">
-                <strong>Important:</strong> This information is for educational purposes only and does not replace professional medical advice.
+                <strong>Important:</strong> This information is for educational purposes only and
+                does not replace professional medical advice.
               </p>
             </div>
           </div>
 
-          <div className={`bg-white rounded-3xl shadow-lg border-2 ${selectedOption === 'medicine' ? 'border-blue-200' : 'border-teal-200'} overflow-hidden`}>
+          <div
+            className={`bg-white rounded-3xl shadow-lg border-2 ${
+              selectedOption === 'medicine' ? 'border-blue-200' : 'border-teal-200'
+            } overflow-hidden`}
+          >
             <div className="h-[500px] overflow-y-auto p-6 space-y-4">
               {chatMessages.map((msg, index) => (
-                <div 
+                <div
                   key={index}
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                    msg.role === 'user' 
-                      ? selectedOption === 'medicine'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-teal-500 text-white'
-                      : msg.emotion === 'urgent'
-                      ? 'bg-red-50 text-red-900 border-2 border-red-300'
-                      : 'bg-gray-50 text-gray-900'
-                  }`}>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                      msg.role === 'user'
+                        ? selectedOption === 'medicine'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-teal-500 text-white'
+                        : msg.emotion === 'urgent'
+                        ? 'bg-red-50 text-red-900 border-2 border-red-300'
+                        : 'bg-gray-50 text-gray-900'
+                    }`}
+                  >
                     <div className="whitespace-pre-line">{msg.message}</div>
                   </div>
                 </div>
@@ -437,9 +578,18 @@ export default function App() {
                 <div className="flex justify-start">
                   <div className="bg-gray-50 rounded-2xl px-4 py-3">
                     <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      ></div>
                     </div>
                   </div>
                 </div>
@@ -447,12 +597,28 @@ export default function App() {
               <div ref={chatEndRef} />
             </div>
 
-            <div className={`border-t-2 ${selectedOption === 'medicine' ? 'border-blue-200' : 'border-teal-200'} p-4`}>
+            <div
+              className={`border-t-2 ${
+                selectedOption === 'medicine' ? 'border-blue-200' : 'border-teal-200'
+              } p-4`}
+            >
               <div className="flex gap-2">
-                <button className={`p-2 border rounded-lg ${selectedOption === 'medicine' ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-teal-300 text-teal-600 hover:bg-teal-50'}`}>
+                <button
+                  className={`p-2 border rounded-lg ${
+                    selectedOption === 'medicine'
+                      ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
+                      : 'border-teal-300 text-teal-600 hover:bg-teal-50'
+                  }`}
+                >
                   <Paperclip className="w-5 h-5" />
                 </button>
-                <button className={`p-2 border rounded-lg ${selectedOption === 'medicine' ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-teal-300 text-teal-600 hover:bg-teal-50'}`}>
+                <button
+                  className={`p-2 border rounded-lg ${
+                    selectedOption === 'medicine'
+                      ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
+                      : 'border-teal-300 text-teal-600 hover:bg-teal-50'
+                  }`}
+                >
                   <Mic className="w-5 h-5" />
                 </button>
                 <input
@@ -461,17 +627,41 @@ export default function App() {
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
-                  className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${selectedOption === 'medicine' ? 'border-blue-300 focus:ring-blue-500' : 'border-teal-300 focus:ring-teal-500'}`}
+                  className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                    selectedOption === 'medicine'
+                      ? 'border-blue-300 focus:ring-blue-500'
+                      : 'border-teal-300 focus:ring-teal-500'
+                  }`}
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={isLoading || !chatInput.trim()}
-                  className={`px-4 py-2 rounded-lg text-white disabled:opacity-50 ${selectedOption === 'medicine' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'}`}
+                  className={`px-4 py-2 rounded-lg text-white disabled:opacity-50 ${
+                    selectedOption === 'medicine'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-teal-600 hover:bg-teal-700'
+                  }`}
                 >
                   {isLoading ? (
-                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.928l3-2.647z"></path>
+                    <svg
+                      className="animate-spin h-5 w-5"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.928l3-2.647z"
+                      ></path>
                     </svg>
                   ) : (
                     <Send className="w-5 h-5" />
@@ -491,7 +681,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <button onClick={handleBack} className="p-2 rounded-lg text-teal-700 hover:bg-teal-100">
+              <button
+                onClick={handleBack}
+                className="p-2 rounded-lg text-teal-700 hover:bg-teal-100"
+              >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <h1 className="text-2xl font-bold text-teal-900">Lifestyle Guidance</h1>
@@ -500,10 +693,14 @@ export default function App() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 shadow-sm border border-teal-200">
-              <label className="block mb-3 font-semibold text-teal-900">Exercise Frequency</label>
+              <label className="block mb-3 font-semibold text-teal-900">
+                Exercise Frequency
+              </label>
               <select
                 value={formData.exerciseFrequency}
-                onChange={(e) => setFormData(prev => ({ ...prev, exerciseFrequency: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, exerciseFrequency: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-teal-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
                 <option value="never">Never</option>
@@ -515,10 +712,17 @@ export default function App() {
             </div>
 
             <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 shadow-sm border border-indigo-200">
-              <label className="block mb-3 font-semibold text-indigo-900">Average Sleep Hours</label>
+              <label className="block mb-3 font-semibold text-indigo-900">
+                Average Sleep Hours
+              </label>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setFormData(prev => ({ ...prev, sleepHours: Math.max(0, prev.sleepHours - 1) }))}
+                  onClick={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sleepHours: Math.max(0, prev.sleepHours - 1),
+                    }))
+                  }
                   className="h-9 w-9 border border-indigo-300 rounded-lg text-indigo-700 hover:bg-indigo-100 flex items-center justify-center"
                 >
                   <Minus className="h-4 w-4" />
@@ -526,11 +730,21 @@ export default function App() {
                 <input
                   type="number"
                   value={formData.sleepHours}
-                  onChange={(e) => setFormData(prev => ({ ...prev, sleepHours: parseInt(e.target.value) || 0 }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sleepHours: parseInt(e.target.value) || 0,
+                    }))
+                  }
                   className="text-center h-9 flex-1 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <button
-                  onClick={() => setFormData(prev => ({ ...prev, sleepHours: Math.min(24, prev.sleepHours + 1) }))}
+                  onClick={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sleepHours: Math.min(24, prev.sleepHours + 1),
+                    }))
+                  }
                   className="h-9 w-9 border border-indigo-300 rounded-lg text-indigo-700 hover:bg-indigo-100 flex items-center justify-center"
                 >
                   <Plus className="h-4 w-4" />
@@ -540,10 +754,14 @@ export default function App() {
             </div>
 
             <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 shadow-sm border border-amber-200">
-              <label className="block mb-3 font-semibold text-amber-900">Current Stress Level</label>
+              <label className="block mb-3 font-semibold text-amber-900">
+                Current Stress Level
+              </label>
               <select
                 value={formData.stressLevel}
-                onChange={(e) => setFormData(prev => ({ ...prev, stressLevel: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, stressLevel: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
               >
                 <option value="low">Low</option>
@@ -557,7 +775,9 @@ export default function App() {
               <label className="block mb-3 font-semibold text-slate-900">Smoking Status</label>
               <select
                 value={formData.smokingStatus}
-                onChange={(e) => setFormData(prev => ({ ...prev, smokingStatus: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, smokingStatus: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
               >
                 <option value="non-smoker">Non-Smoker</option>
@@ -568,10 +788,14 @@ export default function App() {
             </div>
 
             <div className="md:col-span-2 bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-6 shadow-sm border border-rose-200">
-              <label className="block mb-3 font-semibold text-rose-900">Alcohol Consumption</label>
+              <label className="block mb-3 font-semibold text-rose-900">
+                Alcohol Consumption
+              </label>
               <select
                 value={formData.alcoholConsumption}
-                onChange={(e) => setFormData(prev => ({ ...prev, alcoholConsumption: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, alcoholConsumption: e.target.value }))
+                }
                 className="w-full px-3 py-2 border border-rose-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
               >
                 <option value="none">None</option>
@@ -584,10 +808,16 @@ export default function App() {
           </div>
 
           <div className="mt-6 flex justify-end gap-3">
-            <button className="px-8 py-2 border border-gray-300 rounded-lg hover:bg-gray-50" onClick={handleBack}>
+            <button
+              className="px-8 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              onClick={handleBack}
+            >
               Back
             </button>
-            <button className="bg-teal-600 text-white hover:bg-teal-700 px-8 py-2 rounded-lg" onClick={handleContinueToChatbot}>
+            <button
+              className="bg-teal-600 text-white hover:bg-teal-700 px-8 py-2 rounded-lg"
+              onClick={handleContinueToChatbot}
+            >
               Continue to Chat
             </button>
           </div>
@@ -596,6 +826,7 @@ export default function App() {
     );
   }
 
+  // patient-info step
   return (
     <div className="min-h-screen bg-blue-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -611,14 +842,15 @@ export default function App() {
             <textarea
               placeholder="e.g., headache, fever, cough, fatigue..."
               value={formData.symptoms}
-              onChange={(e) => setFormData(prev => ({ ...prev, symptoms: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, symptoms: e.target.value }))}
               className="w-full min-h-[120px] resize-none border border-blue-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
 
           <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 shadow-sm border border-teal-200">
             <label className="block mb-3 font-semibold text-teal-900">
-              Since when have you been experiencing these symptoms? <span className="text-red-500">*</span>
+              Since when have you been experiencing these symptoms?{' '}
+              <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 flex-1">
@@ -631,7 +863,12 @@ export default function App() {
                 <input
                   type="number"
                   value={formData.symptomDuration}
-                  onChange={(e) => setFormData(prev => ({ ...prev, symptomDuration: parseInt(e.target.value) || 0 }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      symptomDuration: parseInt(e.target.value) || 0,
+                    }))
+                  }
                   className="text-center h-9 flex-1 border border-teal-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
                 <button
@@ -643,7 +880,9 @@ export default function App() {
               </div>
               <select
                 value={formData.symptomUnit}
-                onChange={(e) => setFormData(prev => ({ ...prev, symptomUnit: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, symptomUnit: e.target.value }))
+                }
                 className="w-[110px] px-2 py-2 border border-teal-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
                 <option value="hours">hours</option>
@@ -654,7 +893,9 @@ export default function App() {
             </div>
           </div>
 
-          <div className={`${getMealCardColor()} rounded-2xl p-6 shadow-sm text-white transition-colors duration-300`}>
+          <div
+            className={`${getMealCardColor()} rounded-2xl p-6 shadow-sm text-white transition-colors duration-300`}
+          >
             <label className="block mb-3 font-semibold">
               How many meals do you typically have per day?
             </label>
@@ -684,33 +925,56 @@ export default function App() {
             </label>
             <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
               <button
-                onClick={() => setFormData(prev => ({ ...prev, waterIntake: Math.max(0, prev.waterIntake - 1) }))}
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    waterIntake: Math.max(0, prev.waterIntake - 1),
+                  }))
+                }
                 className="flex flex-col items-center transition-all duration-200 hover:scale-110"
               >
                 <div className="w-10 h-14 rounded-lg border-2 border-dashed border-cyan-400 bg-cyan-100 flex items-center justify-center hover:bg-cyan-200">
                   <Minus className="w-5 h-5 text-cyan-600" />
                 </div>
               </button>
-              {Array.from({ length: Math.max(4, formData.waterIntake) }, (_, index) => index + 1).map((bottleNum) => (
-                <button
-                  key={bottleNum}
-                  onClick={() => setFormData(prev => ({ 
-                    ...prev, 
-                    waterIntake: prev.waterIntake === bottleNum ? bottleNum - 1 : bottleNum 
-                  }))}
-                  className="flex flex-col items-center transition-all duration-200 hover:scale-110"
-                >
-                  <div className={`w-10 h-14 rounded-lg border-2 flex items-center justify-center transition-colors ${
-                    formData.waterIntake >= bottleNum 
-                      ? 'bg-cyan-500 border-cyan-600' 
-                      : 'bg-white border-cyan-300'
-                  }`}>
-                    <Droplet className={`w-5 h-5 ${formData.waterIntake >= bottleNum ? 'text-white fill-white' : 'text-cyan-300'}`} />
-                  </div>
-                </button>
-              ))}
+              {Array.from({ length: Math.max(4, formData.waterIntake) }, (_, index) => index + 1).map(
+                (bottleNum) => (
+                  <button
+                    key={bottleNum}
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        waterIntake:
+                          prev.waterIntake === bottleNum ? bottleNum - 1 : bottleNum,
+                      }))
+                    }
+                    className="flex flex-col items-center transition-all duration-200 hover:scale-110"
+                  >
+                    <div
+                      className={`w-10 h-14 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                        formData.waterIntake >= bottleNum
+                          ? 'bg-cyan-500 border-cyan-600'
+                          : 'bg-white border-cyan-300'
+                      }`}
+                    >
+                      <Droplet
+                        className={`w-5 h-5 ${
+                          formData.waterIntake >= bottleNum
+                            ? 'text-white fill-white'
+                            : 'text-cyan-300'
+                        }`}
+                      />
+                    </div>
+                  </button>
+                )
+              )}
               <button
-                onClick={() => setFormData(prev => ({ ...prev, waterIntake: Math.max(prev.waterIntake + 1, 5) }))}
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    waterIntake: Math.max(prev.waterIntake + 1, 5),
+                  }))
+                }
                 className="flex flex-col items-center transition-all duration-200 hover:scale-110"
               >
                 <div className="w-10 h-14 rounded-lg border-2 border-dashed border-cyan-400 bg-cyan-100 flex items-center justify-center hover:bg-cyan-200">
@@ -747,7 +1011,9 @@ export default function App() {
               type="text"
               placeholder="Or type your custom meal..."
               value={formData.lastMeal}
-              onChange={(e) => setFormData(prev => ({ ...prev, lastMeal: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, lastMeal: e.target.value }))
+              }
               className="w-full px-3 py-2 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
           </div>
@@ -759,13 +1025,17 @@ export default function App() {
             <textarea
               placeholder="e.g., existing conditions..."
               value={formData.additionalInfo}
-              onChange={(e) => setFormData(prev => ({ ...prev, additionalInfo: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, additionalInfo: e.target.value }))
+              }
               className="w-full min-h-[80px] resize-none border border-blue-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
 
           <button
-            onClick={() => setSelectedOption(prev => prev === 'medicine' ? null : 'medicine')}
+            onClick={() =>
+              setSelectedOption((prev) => (prev === 'medicine' ? null : 'medicine'))
+            }
             className={`rounded-2xl p-6 shadow-sm transition-all duration-200 text-left border-2 ${
               selectedOption === 'medicine'
                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white border-blue-600 shadow-lg scale-105'
@@ -773,19 +1043,29 @@ export default function App() {
             }`}
           >
             <div className="flex items-center justify-between mb-3">
-              <Pill className={`w-8 h-8 ${selectedOption === 'medicine' ? 'text-white' : 'text-blue-600'}`} />
+              <Pill
+                className={`w-8 h-8 ${
+                  selectedOption === 'medicine' ? 'text-white' : 'text-blue-600'
+                }`}
+              />
               {selectedOption === 'medicine' && (
                 <CheckCircle2 className="w-6 h-6 text-white" />
               )}
             </div>
             <h3 className="text-lg font-semibold mb-1">Medicine Information</h3>
-            <p className={`text-sm ${selectedOption === 'medicine' ? 'text-blue-100' : 'text-blue-600'}`}>
+            <p
+              className={`text-sm ${
+                selectedOption === 'medicine' ? 'text-blue-100' : 'text-blue-600'
+              }`}
+            >
               Add medication details
             </p>
           </button>
 
           <button
-            onClick={() => setSelectedOption(prev => prev === 'lifestyle' ? null : 'lifestyle')}
+            onClick={() =>
+              setSelectedOption((prev) => (prev === 'lifestyle' ? null : 'lifestyle'))
+            }
             className={`rounded-2xl p-6 shadow-sm transition-all duration-200 text-left border-2 ${
               selectedOption === 'lifestyle'
                 ? 'bg-gradient-to-br from-teal-500 to-teal-600 text-white border-teal-600 shadow-lg scale-105'
@@ -793,20 +1073,28 @@ export default function App() {
             }`}
           >
             <div className="flex items-center justify-between mb-3">
-              <Heart className={`w-8 h-8 ${selectedOption === 'lifestyle' ? 'text-white' : 'text-teal-600'}`} />
+              <Heart
+                className={`w-8 h-8 ${
+                  selectedOption === 'lifestyle' ? 'text-white' : 'text-teal-600'
+                }`}
+              />
               {selectedOption === 'lifestyle' && (
                 <CheckCircle2 className="w-6 h-6 text-white" />
               )}
             </div>
             <h3 className="text-lg font-semibold mb-1">Lifestyle Guidance</h3>
-            <p className={`text-sm ${selectedOption === 'lifestyle' ? 'text-teal-100' : 'text-teal-600'}`}>
+            <p
+              className={`text-sm ${
+                selectedOption === 'lifestyle' ? 'text-teal-100' : 'text-teal-600'
+              }`}
+            >
               Share lifestyle habits
             </p>
           </button>
         </div>
 
         <div className="mt-6 flex justify-end">
-          <button 
+          <button
             className="bg-blue-600 text-white hover:bg-blue-700 px-12 py-3 rounded-lg text-lg font-medium disabled:opacity-50"
             onClick={handleNext}
             disabled={!selectedOption}
