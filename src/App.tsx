@@ -46,6 +46,10 @@ export default function App() {
   const [conversationContext, setConversationContext] = useState<any>({});
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  // NEW: file upload state + ref for hidden input
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
     symptoms: '',
     symptomDuration: 1,
@@ -235,6 +239,24 @@ export default function App() {
     return "That's a thoughtful approach! Keep making small, consistent changes. Remember, progress isn't always linear, and every small step counts. Would you like tips on any specific area of your wellness? 💪😊";
   };
 
+  // NEW: helper to convert File → base64 string (without the data: prefix)
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') {
+          const base64 = result.split(',')[1] ?? '';
+          resolve(base64);
+        } else {
+          reject(new Error('Failed to read file'));
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // NEW: Start the conversation by sending form data to Gemini
   const startChatWithGemini = async (mode: 'medicine' | 'lifestyle') => {
     // Save context so we can reuse it later
@@ -345,22 +367,42 @@ Please:
       }
       setChatMessages([]);
       setChatInput('');
+      setAttachedFile(null);
       setConversationContext({});
     } else if (currentStep === 'lifestyle') {
       setCurrentStep('patient-info');
     }
   };
 
+  // UPDATED: now supports sending a file + text together
   const handleSendMessage = async () => {
-    if (chatInput.trim() === '') return;
+    if (chatInput.trim() === '' && !attachedFile) return;
 
-    const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', message: chatInput }];
+    const newMessages: ChatMessage[] = [
+      ...chatMessages,
+      {
+        role: 'user',
+        message: chatInput.trim() || '[File uploaded]',
+      },
+    ];
     setChatMessages(newMessages);
+
     const currentInput = chatInput;
     setChatInput('');
     setIsLoading(true);
 
     try {
+      let filePayload: any = null;
+
+      if (attachedFile) {
+        const base64 = await fileToBase64(attachedFile);
+        filePayload = {
+          name: attachedFile.name,
+          type: attachedFile.type || 'application/octet-stream',
+          data: base64,
+        };
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -371,7 +413,8 @@ Please:
           context: conversationContext,
           pathType: selectedOption,
           patientInfo: formData,
-          chatHistory: chatMessages.slice(-10),
+          chatHistory: newMessages.slice(-10),
+          file: filePayload,
         }),
       });
 
@@ -402,11 +445,13 @@ Please:
         ...prev,
         {
           role: 'bot',
-          message: "I'm having a moment of trouble connecting. Please try again — I'm here to help! 💙",
+          message:
+            "I'm having a moment of trouble connecting. Please try again — I'm here to help! 💙",
         },
       ]);
     } finally {
       setIsLoading(false);
+      setAttachedFile(null);
     }
   };
 
@@ -602,13 +647,29 @@ Please:
                 selectedOption === 'medicine' ? 'border-blue-200' : 'border-teal-200'
               } p-4`}
             >
-              <div className="flex gap-2">
+              {/* hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".pdf,.txt,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setAttachedFile(file);
+                  }
+                }}
+              />
+
+              <div className="flex gap-2 items-center">
                 <button
                   className={`p-2 border rounded-lg ${
                     selectedOption === 'medicine'
                       ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
                       : 'border-teal-300 text-teal-600 hover:bg-teal-50'
                   }`}
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
@@ -618,15 +679,26 @@ Please:
                       ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
                       : 'border-teal-300 text-teal-600 hover:bg-teal-50'
                   }`}
+                  type="button"
                 >
                   <Mic className="w-5 h-5" />
                 </button>
+
+                {/* optional: show file name when attached */}
+                {attachedFile && (
+                  <span className="text-xs text-gray-500 max-w-[140px] truncate">
+                    {attachedFile.name}
+                  </span>
+                )}
+
                 <input
                   type="text"
                   placeholder="Type your message..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
+                  onKeyPress={(e) =>
+                    e.key === 'Enter' && !isLoading && handleSendMessage()
+                  }
                   className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                     selectedOption === 'medicine'
                       ? 'border-blue-300 focus:ring-blue-500'
@@ -635,7 +707,7 @@ Please:
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={isLoading || !chatInput.trim()}
+                  disabled={isLoading || (!chatInput.trim() && !attachedFile)}
                   className={`px-4 py-2 rounded-lg text-white disabled:opacity-50 ${
                     selectedOption === 'medicine'
                       ? 'bg-blue-600 hover:bg-blue-700'
