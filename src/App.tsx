@@ -107,7 +107,7 @@ export default function App() {
     return 'neutral';
   };
 
-  // (kept for possible local logic later – not used to generate Gemini replies)
+  // Kept for possible local logic later – not used to generate Gemini replies
   const generateEmpathicResponse = (userMessage: string, context: any): string => {
     const emotion = detectEmotionalTone(userMessage);
 
@@ -230,42 +230,61 @@ export default function App() {
     return 'Small lifestyle changes build up over time. If you tell me which area you want to focus on most, I can share more specific general suggestions.';
   };
 
-  // ---- Speech-to-text handler ----
+  // ---- Speech-to-text handler (updated) ----
   const handleMicClick = () => {
+    // If already listening, stop the current session
     if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.error('Error stopping recognition:', e);
+      }
       return;
     }
 
     if (typeof window === 'undefined') return;
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // Support both prefixed and unprefixed versions
+    const SR =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
 
-    if (!SpeechRecognition) {
-      alert('Speech recognition is not supported in this browser. Please try Chrome or Edge.');
+    if (!SR) {
+      alert(
+        'Speech recognition is not available in this browser right now. Please try Chrome or another supported browser.'
+      );
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SR();
     recognitionRef.current = recognition;
 
     recognition.lang = 'en-US';
     recognition.continuous = false;
-    recognition.interimResults = true;
+    recognition.interimResults = false; // only final result
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
 
     recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      transcript = transcript.trim();
-      if (transcript) {
+      try {
+        const lastResultIndex = event.results.length - 1;
+        const result = event.results[lastResultIndex];
+        if (!result || !result[0]) return;
+
+        const transcript = result[0].transcript.trim();
+        if (!transcript) return;
+
+        // Append to existing input so user can edit before sending
         setChatInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      } catch (e) {
+        console.error('Speech result error:', e);
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event);
       setIsListening(false);
     };
 
@@ -273,8 +292,12 @@ export default function App() {
       setIsListening(false);
     };
 
-    recognition.start();
-    setIsListening(true);
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error('Error starting recognition:', e);
+      setIsListening(false);
+    }
   };
 
   // ---- File → base64 helper ----
