@@ -73,7 +73,7 @@ After this heading, output a bullet list of the common OTC categories people use
 for symptoms like theirs.
 Each bullet must start with "• " and include the category plus 1–2 example medicines, for example:
 • Pain and fever relievers (such as paracetamol/acetaminophen or ibuprofen)
-• Cold and flu combinations
+• Cold and flu combination medicines
 • Saline nasal spray
 • Throat soothing lozenges
 Do NOT tell them exactly which one to take; explain these are general examples.
@@ -117,6 +117,8 @@ Keep suggestions gentle, realistic, and non-judgmental.
 /**
  * User-level prompt.
  * Uses form data + chat history and tells the model what to do *right now*.
+ * First message → full 4-section structure.
+ * Follow-ups → short, non-repetitive answer.
  */
 function buildUserPrompt(options: {
   message: string;
@@ -126,12 +128,13 @@ function buildUserPrompt(options: {
 }) {
   const { message, pathType, patientInfo, chatHistory } = options;
 
-  const historyText =
-    chatHistory && chatHistory.length
-      ? chatHistory
-          .map((m: any) => `${m.role === "user" ? "User" : "Medsafe"}: ${m.message}`)
-          .join("\n")
-      : "No previous messages yet.";
+  const hasHistory = !!(chatHistory && chatHistory.length);
+
+  const historyText = hasHistory
+    ? chatHistory
+        .map((m: any) => `${m.role === "user" ? "User" : "Medsafe"}: ${m.message}`)
+        .join("\n")
+    : "No previous messages yet.";
 
   const commonFormText = `
 Form information:
@@ -151,88 +154,94 @@ Alcohol consumption: ${patientInfo?.alcoholConsumption}
 
   let taskText: string;
 
-  if (pathType === "medicine") {
-    taskText = `
-TASK:
-The user is on the Medicine Information path.
+  // ---------- FIRST MESSAGE: FULL STRUCTURE ----------
+  if (!hasHistory) {
+    if (pathType === "medicine") {
+      taskText = `
+FIRST ANSWER TASK (MEDICINE):
+The user is on the Medicine Information path and this is the first answer.
 
 Use the symptoms and form details above to personalise your explanation.
 Follow the four-section structure and formatting rules for medicine answers
 that are described in the system prompt.
 
-FORMAT REQUIREMENTS FOR YOUR ANSWER:
 Use exactly these four headings, each on its own line, written with Unicode bold:
 𝗪𝗵𝗮𝘁 𝗬𝗼𝘂’𝗿𝗲 𝗘𝘅𝗽𝗲𝗿𝗶𝗲𝗻𝗰𝗶𝗻𝗴 & 𝗛𝗼𝘄 𝘁𝗼 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗥𝗲𝗰𝗼𝘃𝗲𝗿𝘆
 𝗖𝗼𝗺𝗺𝗼𝗻 𝗢𝘃𝗲𝗿-𝘁𝗵𝗲-𝗖𝗼𝘂𝗻𝘁𝗲𝗿 𝗢𝗽𝘁𝗶𝗼𝗻𝘀
 𝗛𝗼𝘄 𝗘𝗮𝗰𝗵 𝗢𝗽𝘁𝗶𝗼𝗻 𝗛𝗲𝗹𝗽𝘀 & 𝗧𝘆𝗽𝗶𝗰𝗮𝗹 𝗨𝘀𝗲
 𝗪𝗵𝗲𝗻 𝘁𝗼 𝗦𝗲𝗲 𝗮 𝗗𝗼𝗰𝘁𝗼𝗿 𝗼𝗿 𝗚𝗲𝘁 𝗨𝗿𝗴𝗲𝗻𝘁 𝗛𝗲𝗹𝗽
 
-Do NOT use Markdown or asterisks.
 For Section 1, Section 2, and Section 3, use bullet points that start with "• ".
-Section 4 can be a short paragraph or bullet points, using "• " if you choose bullets.
+Section 4 can be a short paragraph or bullet points.
 Keep the whole answer concise but helpful (around 180–220 words).
-
-CONTENT REQUIREMENTS BY SECTION:
-
-SECTION 1 – after the heading, output 3–5 short bullet points that:
-• summarise their symptoms and duration,
-• describe their current meals, water intake, and relevant lifestyle context,
-• give 1–2 very short suggestions on how improving meals, water, or rest
-  can support recovery.
-
-SECTION 2 – after the heading, output a bullet list of common OTC categories
-people often use for their kind of symptoms, with examples, such as:
-• Pain and fever relievers (paracetamol/acetaminophen, ibuprofen)
-• Cold and flu combination medicines
-• Saline nasal spray
-• Throat soothing lozenges
-Use similar structure, adapted to their situation.
-
-SECTION 3 – after the heading, output a bullet list where each bullet corresponds
-to a category you listed in Section 2, in the same order.
-For each:
-• explain briefly what it helps with,
-• describe typical use in general terms (for example "often used every 4–6 hours
-  as directed on the package"),
-• mention if it is usually taken with food or after a meal (if relevant),
-• and remind them to read and follow the package instructions and not exceed
-  the maximum daily dose.
-
-SECTION 4 – explain when to see a doctor if symptoms persist or worsen,
-and describe clear red-flag symptoms that require urgent or emergency help.
-Always end by reminding them that you are an AI providing general information, not a doctor.
 `.trim();
-  } else if (pathType === "lifestyle") {
-    taskText = `
-TASK:
-The user is on the Lifestyle Guidance path.
+    } else if (pathType === "lifestyle") {
+      taskText = `
+FIRST ANSWER TASK (LIFESTYLE):
+The user is on the Lifestyle Guidance path and this is the first answer.
 
 Use the symptoms and lifestyle details above (sleep, stress, water, exercise, smoking, alcohol).
 Follow the four-section structure and formatting rules for lifestyle answers
 that are described in the system prompt.
 
-FORMAT REQUIREMENTS:
 Use these four headings, each on its own line, in Unicode bold:
 𝗪𝗵𝗮𝘁 𝗬𝗼𝘂’𝗿𝗲 𝗘𝘅𝗽𝗲𝗿𝗶𝗲𝗻𝗰𝗶𝗻𝗴 & 𝗖𝘂𝗿𝗿𝗲𝗻𝘁 𝗟𝗶𝗳𝗲𝘀𝘁𝘆𝗹𝗲
 𝗛𝗼𝘄 𝗟𝗶𝗳𝗲𝘀𝘁𝘆𝗹𝗲 𝗖𝗵𝗮𝗻𝗴𝗲𝘀 𝗖𝗮𝗻 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗥𝗲𝗰𝗼𝘃𝗲𝗿𝘆
 𝗦𝗽𝗲𝗰𝗶𝗳𝗶𝗰 𝗟𝗶𝗳𝗲𝘀𝘁𝘆𝗹𝗲 𝗦𝘂𝗴𝗴𝗲𝘀𝘁𝗶𝗼𝗻𝘀
 𝗪𝗵𝗲𝗻 𝘁𝗼 𝗦𝗲𝗲 𝗮 𝗗𝗼𝗰𝘁𝗼𝗿 𝗼𝗿 𝗚𝗲𝘁 𝗨𝗿𝗴𝗲𝗻𝘁 𝗛𝗲𝗹𝗽
 
-No Markdown, no asterisks, no numbered lists.
-You may use bullet points starting with "• " where helpful, or short paragraphs.
+You may use bullet points ("• ") and/or short paragraphs.
 Keep the answer around 180–220 words.
 `.trim();
-  } else {
-    // Fallback if pathType is somehow null
-    taskText = `
-TASK:
+    } else {
+      taskText = `
+FIRST ANSWER TASK (UNKNOWN PATH):
 Path type is unknown. Use the symptoms and lifestyle information above
-to give safe, general guidance.
-
-Use clear headings with Unicode bold as described in the system prompt.
-No Markdown, no asterisks, no numbered lists.
-Always end with information about when to see a doctor or get urgent help.
+to give safe, general guidance in four clear sections with Unicode bold headings,
+as described in the system prompt.
 `.trim();
+    }
+  }
+
+  // ---------- FOLLOW-UP MESSAGES: SHORT, NO FULL STRUCTURE ----------
+  else {
+    if (pathType === "medicine") {
+      taskText = `
+FOLLOW-UP TASK (MEDICINE):
+The user already received an initial four-section medicine explanation earlier.
+Now they are asking a follow-up question or want more detail.
+
+How to respond now:
+Do NOT repeat the full four-section structure.
+Do NOT re-summarise everything unless absolutely necessary.
+Answer the user's latest message directly, referring back to earlier advice when helpful.
+You may use 2–5 short bullet points (starting with "• ") or 1–2 short paragraphs.
+Keep it concise (about 60–120 words).
+`.trim();
+    } else if (pathType === "lifestyle") {
+      taskText = `
+FOLLOW-UP TASK (LIFESTYLE):
+The user already received an initial four-section lifestyle explanation earlier.
+Now they are asking a follow-up question or want more detail.
+
+How to respond now:
+Do NOT repeat the full four-section structure.
+Do NOT restate the entire lifestyle summary.
+Answer the user's latest message directly, with gentle, practical guidance.
+You may use 2–5 short bullet points (starting with "• ") or 1–2 short paragraphs.
+Keep it concise (about 60–120 words).
+`.trim();
+    } else {
+      taskText = `
+FOLLOW-UP TASK (UNKNOWN PATH):
+The user already received an initial explanation earlier.
+Now they are asking a follow-up question.
+
+Answer the new question directly.
+Do NOT repeat long summaries from before.
+Keep it short and clear (about 60–120 words).
+`.trim();
+    }
   }
 
   return `
@@ -249,7 +258,7 @@ ${taskText}
 }
 
 export default async function handler(req: any, res: any) {
-  // Keep our working GET check
+  // Simple GET check
   if (req.method === "GET") {
     res.status(200).json({
       ok: true,
@@ -304,7 +313,7 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify(payload),
     });
 
-    // IMPORTANT: never throw here – frontend treats non-OK as "connection trouble"
+    // Never throw here – frontend treats non-OK as "connection trouble"
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       res.status(200).json({
