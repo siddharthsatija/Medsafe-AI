@@ -107,7 +107,7 @@ export default function App() {
     return 'neutral';
   };
 
-  // (kept for possible local logic later)
+  // (kept for possible local logic later – not used to generate Gemini replies)
   const generateEmpathicResponse = (userMessage: string, context: any): string => {
     const emotion = detectEmotionalTone(userMessage);
 
@@ -232,7 +232,6 @@ export default function App() {
 
   // ---- Speech-to-text handler ----
   const handleMicClick = () => {
-    // Second click stops listening
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       return;
@@ -315,17 +314,18 @@ export default function App() {
 Please:
 1) Greet them warmly and acknowledge how they might be feeling.
 2) Summarise their symptoms and how long they have been present.
-3) Explain what types of over-the-counter medicines are commonly used in general for these symptoms, how they work, and typical onset times.
-4) Suggest simple home-care steps such as fluids, rest, and light clothing.
-5) List warning signs when they should seek urgent or in-person medical care.
-6) Remind them to always read medicine package instructions and talk to a doctor or pharmacist if unsure.`
+3) Give exactly 3–5 short bullets under "What You Are Experiencing And How To Support Recovery". Each bullet must be a single concise sentence (under 20 words).
+4) Give 2–4 bullets under "Common Over-The-Counter Options" naming general categories people often use, matching their symptoms.
+5) Give 2–4 bullets under "How Each Option Helps And Typical Use" explaining briefly what each option helps with and that it is often taken every few hours as directed on the package (no exact mg or personal dosing).
+6) Give 3–5 bullets under "When To See A Doctor Or Get Urgent Help" listing clear warning signs.
+7) Finish with one short line reminding them this is general education, not a diagnosis.`
           : `The user has just filled a lifestyle and wellness questionnaire.
 Please:
-1) Summarise their current habits (sleep, water intake, meals, stress, exercise, smoking, alcohol).
-2) Suggest small, realistic changes they can start with.
-3) Explain roughly how soon people often start to feel benefits.
-4) Encourage consistency and self-kindness.
-5) Remind them this is general wellness guidance and they should talk to a healthcare professional for any medical concerns.`;
+1) Summarise their current habits in 3–5 bullets under "Your Current Habits At A Glance".
+2) Suggest 4–6 specific but gentle changes under "Small Changes You Can Start With".
+3) Explain realistic timelines in 3–5 bullets under "What You Might Notice Over Time".
+4) Give 3–5 bullets under "When To Get Extra Support" describing when it would help to talk to a professional.
+5) Finish with one short line saying this is general wellness guidance, not a substitute for medical care.`;
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -530,6 +530,50 @@ Please:
     });
   };
 
+  // ---- Format bot text: bold headings + bullets ----
+  const renderBotMessage = (text: string) => {
+    const headings = new Set([
+      'What You Are Experiencing And How To Support Recovery',
+      'Common Over-The-Counter Options',
+      'How Each Option Helps And Typical Use',
+      'When To See A Doctor Or Get Urgent Help',
+      'Your Current Habits At A Glance',
+      'Small Changes You Can Start With',
+      'What You Might Notice Over Time',
+      'When To Get Extra Support',
+    ]);
+
+    return text.split('\n').map((line, index) => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        return <div key={index} className="h-2" />;
+      }
+
+      if (headings.has(trimmed)) {
+        return (
+          <p key={index} className="font-semibold mb-1">
+            {trimmed}
+          </p>
+        );
+      }
+
+      if (trimmed.startsWith('- ')) {
+        return (
+          <p key={index} className="pl-4 mb-0.5">
+            • {trimmed.slice(2)}
+          </p>
+        );
+      }
+
+      return (
+        <p key={index} className="mb-1">
+          {trimmed}
+        </p>
+      );
+    });
+  };
+
   // --------- RENDERING ---------
 
   if (currentStep === 'age-verification') {
@@ -646,7 +690,11 @@ Please:
                         : 'bg-gray-50 text-gray-900'
                     }`}
                   >
-                    <div className="whitespace-pre-line">{msg.message}</div>
+                    {msg.role === 'bot' ? (
+                      <div className="space-y-0.5">{renderBotMessage(msg.message)}</div>
+                    ) : (
+                      <div className="whitespace-pre-line">{msg.message}</div>
+                    )}
                   </div>
                 </div>
               ))}
