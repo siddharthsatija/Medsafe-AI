@@ -1,191 +1,256 @@
-const apiKey = process.env.GEMINI_API_KEY as string | undefined;
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+// api/chat.ts
+// Serverless API route for Medsafe-AI
+// - Handles BOTH "Medicine Information" and "Lifestyle Guidance" flows
+// - Calls Gemini via REST (no extra npm client needed)
+// - Returns a single string: { text: "..." }
 
-type PathType = "medicine" | "lifestyle" | null;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-function buildSystemPrompt(pathType: PathType) {
-  const base = `
-You are "Medsafe", an empathetic health companion chatbot.
+// ---------- SYSTEM PROMPT ----------
 
-SAFETY RULES:
-- Provide **general educational information only**.
-- You are NOT a doctor, do NOT diagnose, and do NOT prescribe.
-- Never give exact doses, frequencies, or schedules for this specific user.
-- You may mention common OTC categories in general terms
-  (for example "paracetamol is often used for fever in adults"),
-  but always tell them to follow the package instructions and ask a doctor or pharmacist.
-- If they ask "exactly what should I take / how many mg / how many times / after which meal",
-  kindly explain you cannot provide that, and they must talk to a real clinician.
+const SYSTEM_PROMPT = `
+You are Medsafe-AI, a friendly, empathetic health information assistant.
 
-EMERGENCIES AND SELF-HARM:
-- If they mention chest pain, difficulty breathing, stroke symptoms, severe bleeding,
-  confusion, seizures, or self-harm thoughts:
-  - Tell them this may be an emergency.
-  - Advise them to seek urgent in-person help (emergency number, ER, crisis line, trusted adult).
-  - Do not continue with casual lifestyle or medicine suggestions.
+GOALS
+- Talk to users in a warm, human way.
+- Help them understand how their habits (food, water, rest, hydration, lifestyle) affect recovery.
+- Provide general information on commonly used over-the-counter (OTC) medicines.
+- Provide general lifestyle guidance when requested (exercise, sleep, stress, smoking, alcohol).
+- Clearly explain when to see a doctor or seek urgent care.
 
-STYLE:
-- Warm, calm, and reassuring.
+SAFETY
+- You are NOT a doctor and NOT a substitute for professional medical care.
+- Do NOT give confirmed diagnoses. Use phrases like "could be related to" or "may be consistent with".
+- Do NOT prescribe or adjust prescription medicines or set exact medical doses.
+- For OTC medicines:
+  - Speak in general terms like "often taken every X–Y hours as directed on the package".
+  - Never override package instructions or local medical advice.
+  - Always remind users not to exceed the maximum daily dose.
+- If symptoms are serious, unclear, or worsening, advise seeing a doctor.
+- If red-flag symptoms are present (difficulty breathing, chest pain, severe confusion, very stiff neck, signs of stroke, etc.), strongly advise urgent or emergency care.
+
+STYLE
+- Always use **bold headings** for each section.
+- Be empathetic, supportive, and concise.
 - Use short paragraphs and bullet points where helpful.
-- End by reminding them this is general information and not a diagnosis.
-`;
+- Use simple language and briefly explain any medical term.
 
-  const medicine = `
-CONTEXT: User selected "Medicine Information".
+RESPONSE STRUCTURE FOR MEDICINE FOCUS
+1. **What You’re Experiencing & How to Support Recovery**
+2. **Common Over-the-Counter Options**
+3. **How Each Option Helps & Typical Use**
+4. **When to See a Doctor or Get Urgent Help**
 
-GOALS:
-- Briefly acknowledge how they might be feeling.
-- Summarise their symptoms and how long they've been present.
-- Explain what kinds of general OTC options are commonly used for symptoms like theirs (without prescribing).
-- Explain roughly how these options work and typical onset times.
-- Suggest simple home-care steps (rest, fluids, light clothing, etc.).
-- List warning signs when they should seek urgent or in-person care.
-`;
+RESPONSE STRUCTURE FOR LIFESTYLE FOCUS
+1. **What You’re Experiencing & Current Lifestyle**
+2. **How Lifestyle Changes Can Support Recovery**
+3. **Specific Lifestyle Suggestions**
+4. **When to See a Doctor or Get Urgent Help**
+`.trim();
 
-  const lifestyle = `
-CONTEXT: User selected "Lifestyle Guidance".
+// ---------- HELPER TO CALL GEMINI REST API ----------
 
-GOALS:
-- Summarise their habits (sleep, water, exercise, stress, smoking, alcohol).
-- Suggest small, achievable improvements (no extreme changes).
-- Mention rough timelines like "many people notice better energy after a few days of...".
-- Encourage them to see a professional if they have medical conditions or worrying symptoms.
-`;
+async function callGemini(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    console.error("Missing GEMINI_API_KEY env var");
+    throw new Error("Server misconfiguration: GEMINI_API_KEY not set.");
+  }
 
-  if (pathType === "medicine") return base + medicine;
-  if (pathType === "lifestyle") return base + lifestyle;
-  return base;
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=" +
+    GEMINI_API_KEY;
+
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
+      {
+        role: "user",
+        parts: [{ text: prompt }],
+      },
+    ],
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini API error:", response.status, errorText);
+    throw new Error("Gemini API request failed.");
+  }
+
+  const data = await response.json();
+
+  // Try to extract the first candidate's text
+  const text =
+    data?.candidates?.[0]?.content?.parts
+      ?.map((p: any) => p?.text ?? "")
+      .join("")
+      .trim() ?? "";
+
+  if (!text) {
+    console.error("Gemini API returned no text:", JSON.stringify(data, null, 2));
+    throw new Error("No text returned from Gemini.");
+  }
+
+  return text;
 }
 
-function buildUserPrompt(options: {
-  message: string;
-  pathType: PathType;
-  patientInfo: any;
-  chatHistory: any[];
-}) {
-  const { message, pathType, patientInfo, chatHistory } = options;
+// ---------- MAIN HANDLER ----------
 
-  const historyText =
-    chatHistory && chatHistory.length
-      ? chatHistory
-          .map((m: any) => `${m.role === "user" ? "User" : "Medsafe"}: ${m.message}`)
-          .join("\n")
-      : "No previous messages yet.";
-
-  return `
-Previous conversation:
-${historyText}
-
-Form information:
-- Path type: ${pathType ?? "unknown"}
-- Symptoms: ${patientInfo?.symptoms || "not provided"}
-- Duration: ${patientInfo?.symptomDuration} ${patientInfo?.symptomUnit}
-- Meals per day: ${patientInfo?.mealsPerDay}
-- Water intake: ${patientInfo?.waterIntake} L/day
-- Last meal: ${patientInfo?.lastMeal || "not provided"}
-- Selected foods: ${(patientInfo?.selectedFoods || []).join(", ") || "none"}
-- Sleep hours: ${patientInfo?.sleepHours}
-- Stress level: ${patientInfo?.stressLevel}
-- Exercise frequency: ${patientInfo?.exerciseFrequency}
-- Smoking status: ${patientInfo?.smokingStatus}
-- Alcohol consumption: ${patientInfo?.alcoholConsumption}
-
-User's latest message:
-"${message}"
-
-HOW TO RESPOND:
-- Speak as "Medsafe".
-- Use their symptoms/lifestyle context naturally.
-- Give practical, **general** guidance (no personalised prescriptions).
-- If they push for exact medicines or doses for themselves, gently decline and explain why.
-- Remind them this is educational and not a diagnosis or a substitute for seeing a professional.
-`;
-}
-
+// NOTE: This uses "any" types so it works in both JS/TS without extra imports
 export default async function handler(req: any, res: any) {
-  // Keep our working GET check
-  if (req.method === "GET") {
-    res.status(200).json({
-      ok: true,
-      message: "GET /api/chat is working ✅",
-      hasApiKey: !!apiKey,
-    });
-    return;
-  }
-
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed. Use POST." });
-    return;
-  }
-
-  // If the key is missing, don't crash – just explain
-  if (!apiKey) {
-    res.status(200).json({
-      response:
-        "⚠️ Medsafe server configuration issue: GEMINI_API_KEY is not set or invalid in the Vercel Environment Variables. Please add it and redeploy.",
-    });
-    return;
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { message, pathType, patientInfo, chatHistory } = req.body as {
-      message: string;
-      pathType: PathType;
-      patientInfo: any;
-      chatHistory: any[];
-    };
+    // Expecting this shape from the frontend:
+    //
+    // {
+    //   age, sex,
+    //   conditions, medications, allergies,
+    //   symptoms, duration,
+    //   foodIntake,          // e.g. "2 meals/day; last meal: Soup"
+    //   waterIntake,         // e.g. "1.5 L/day"
+    //   extraDetails,
+    //   exerciseFrequency,   // lifestyle only
+    //   sleepHours,          // lifestyle only
+    //   stressLevel,         // lifestyle only
+    //   smokingStatus,       // lifestyle only
+    //   alcoholConsumption,  // lifestyle only
+    //   focus: "medicine" | "lifestyle"
+    // }
 
-    const systemPrompt = buildSystemPrompt(pathType);
-    const userPrompt = buildUserPrompt({
-      message,
-      pathType,
-      patientInfo,
-      chatHistory: chatHistory || [],
-    });
+    const {
+      age,
+      sex,
+      conditions,
+      medications,
+      allergies,
+      symptoms,
+      duration,
+      foodIntake,
+      waterIntake,
+      extraDetails,
+      exerciseFrequency,
+      sleepHours,
+      stressLevel,
+      smokingStatus,
+      alcoholConsumption,
+      focus,
+    } = req.body || {};
 
-    const payload = {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: systemPrompt + "\n\n" + userPrompt }],
-        },
-      ],
-    };
+    const wordLimit = 220;
+    let userPrompt: string;
 
-    const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    if (focus === "lifestyle") {
+      // --------- LIFESTYLE GUIDANCE PROMPT ---------
+      userPrompt = `
+Here is the user’s information:
 
-    // IMPORTANT: never throw here – frontend treats non-OK as "connection trouble"
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      res.status(200).json({
-        response:
-          "⚠️ I had a problem talking to the Gemini model, so I couldn't generate a full answer.\n\n" +
-          `Technical details for the developer:\nHTTP ${response.status} ${response.statusText}\n` +
-          errorText,
-      });
-      return;
+- Age: ${age || "not provided"}
+- Sex: ${sex || "not provided"}
+- Existing conditions: ${conditions || "none reported"}
+- Current medications: ${medications || "none reported"}
+- Allergies: ${allergies || "not reported"}
+- Symptoms: ${symptoms || "not provided"}
+- Symptom duration: ${duration || "not provided"}
+- Food intake today: ${foodIntake || "not provided"}
+- Water intake today: ${waterIntake || "not provided"}
+- Exercise frequency: ${exerciseFrequency || "not provided"}
+- Average sleep hours: ${sleepHours || "not provided"}
+- Current stress level: ${stressLevel || "not provided"}
+- Smoking status: ${smokingStatus || "not provided"}
+- Alcohol consumption: ${alcoholConsumption || "not provided"}
+- Other details: ${extraDetails || "none"}
+
+TASK:
+The user selected Lifestyle Guidance. Generate a response using bold section headings and follow this 4-step structure:
+
+1) **What You’re Experiencing & Current Lifestyle**
+   - Summarize their symptoms and lifestyle.
+   - Be empathetic and explain how these habits affect recovery.
+
+2) **How Lifestyle Changes Can Support Recovery**
+   - Explain in simple terms how hydration, nutrition, movement, sleep, and stress management can help.
+
+3) **Specific Lifestyle Suggestions**
+   - Give practical, gentle suggestions for exercise, sleep, stress, smoking/alcohol if relevant.
+   - Keep it realistic and non-judgmental.
+
+4) **When to See a Doctor or Get Urgent Help**
+   - When to see a doctor if symptoms or lifestyle concerns persist.
+   - Red-flag symptoms requiring urgent or emergency care.
+   - End by reminding them you’re an AI health information assistant, not a doctor.
+
+WORD LIMIT:
+Keep the entire response within ${wordLimit} words.
+
+Use a warm, conversational tone.
+      `.trim();
+    } else {
+      // --------- MEDICINE INFORMATION PROMPT (DEFAULT) ---------
+      userPrompt = `
+Here is the user’s information:
+
+- Age: ${age || "not provided"}
+- Sex: ${sex || "not provided"}
+- Existing conditions: ${conditions || "none reported"}
+- Current medications: ${medications || "none reported"}
+- Allergies: ${allergies || "not reported"}
+- Symptoms: ${symptoms || "not provided"}
+- Symptom duration: ${duration || "not provided"}
+- Food intake today: ${foodIntake || "not provided"}
+- Water intake today: ${waterIntake || "not provided"}
+- Other details: ${extraDetails || "none"}
+
+TASK:
+The user selected Medicine Information. Generate a response using bold section headings and follow this 4-step structure:
+
+1) **What You’re Experiencing & How to Support Recovery**
+   - Summarize their symptoms and current habits (meals, water, rest).
+   - Be empathetic and explain how improving habits can support recovery.
+
+2) **Common Over-the-Counter Options**
+   - List common OTC categories (e.g., fever/pain relievers, cold/flu combinations, saline nasal spray, throat lozenges).
+   - Do NOT prescribe; keep guidance general.
+
+3) **How Each Option Helps & Typical Use**
+   - For each option, say:
+     - What it helps with
+     - How often it is typically taken (e.g., "often taken every 4–6 hours as directed on the label")
+     - Whether it is usually taken with food or after a meal
+   - Always remind the user to follow the package instructions and not exceed the maximum daily dose.
+
+4) **When to See a Doctor or Get Urgent Help**
+   - When to see a doctor or urgent care if symptoms don’t improve or worsen.
+   - Red-flag symptoms requiring urgent or emergency care.
+   - End by reminding them you’re an AI health information assistant, not a doctor.
+
+WORD LIMIT:
+Keep the entire response within ${wordLimit} words.
+
+Use a warm, conversational tone.
+      `.trim();
     }
 
-    const data = await response.json();
+    const text = await callGemini(userPrompt);
 
-    const text =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((p: any) => p.text || "")
-        .join("") || "Sorry, I couldn't generate a response right now.";
-
-    res.status(200).json({ response: text });
-  } catch (error: any) {
-    console.error("/api/chat Gemini error:", error);
-    res.status(200).json({
-      response:
-        "⚠️ I ran into an error while trying to talk to the Gemini model.\n\n" +
-        "Technical details for the developer:\n" +
-        (error?.message || String(error)),
-    });
+    return res.status(200).json({ text });
+  } catch (err: any) {
+    console.error("Medsafe API error:", err);
+    return res
+      .status(500)
+      .json({ error: "Something went wrong generating the response." });
   }
 }
