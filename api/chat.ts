@@ -43,7 +43,8 @@ STYLE
   const medicine = `
 CONTEXT: The user selected Medicine Information.
 
-STRUCTURE YOUR ANSWER LIKE THIS (headings as plain text lines, no symbols around them):
+FOR THE FIRST, COMPREHENSIVE ANSWER, STRUCTURE YOUR RESPONSE LIKE THIS
+(headings as plain text lines, no symbols around them):
 
 What You Are Experiencing And How To Support Recovery
 - 2–4 short bullets summarising their symptoms, duration, and lifestyle context (meals, water, sleep).
@@ -69,7 +70,7 @@ Always finish with one short line reminding them that this is general education 
   const lifestyle = `
 CONTEXT: The user selected Lifestyle Guidance.
 
-STRUCTURE YOUR ANSWER LIKE THIS:
+FOR THE FIRST, COMPREHENSIVE ANSWER, STRUCTURE YOUR RESPONSE LIKE THIS:
 
 Your Current Habits At A Glance
 - 3–6 bullets summarising their sleep, water, meals, stress, exercise, smoking, and alcohol based on the form.
@@ -108,9 +109,24 @@ function buildUserPrompt(options: {
           .join('\n')
       : 'No previous messages yet.';
 
+  const hasHistory = !!(chatHistory && chatHistory.length);
+
   const fileLine = file
     ? `The user also uploaded a file named "${file.name}" of type "${file.type}". Use information from this file together with the text and form when helpful.`
     : 'No file was uploaded for this message.';
+
+  // Extra behaviour instructions for follow-up turns
+  const followUpInstructions = hasHistory
+    ? `
+FOLLOW-UP BEHAVIOUR
+- This is a follow-up question, not the first response.
+- Do NOT repeat your entire previous explanation or all sections again.
+- Do NOT regenerate the full "Your Current Habits At A Glance" or "Small Changes You Can Start With" blocks unless the user clearly asks you to repeat them.
+- Briefly refer to earlier points only if it helps (for example "earlier we talked about your sleep"), then focus on answering the new question.
+- Keep follow-up replies shorter: usually 2–5 dash bullets OR 1–2 short paragraphs.
+- Answer only what the user is asking now, using their previous context when helpful.
+`
+    : '';
 
   return `
 Previous conversation
@@ -139,12 +155,13 @@ User's latest message
 HOW TO RESPOND
 - Speak as Medsafe in warm, plain language.
 - Use the form information and, if present, the uploaded file content as context.
-- Follow the requested section structure for the chosen path type.
+- For the first main answer in this conversation, follow the requested section structure for the chosen path type.
 - Use headings as plain text lines with no hashes or asterisks.
 - Use dash bullets for lists.
 - Do not include emojis or markdown.
 - Do not give exact doses or personalised prescriptions.
 - Remind them at the end that this is general information and not a diagnosis.
+${followUpInstructions}
 `;
 }
 
