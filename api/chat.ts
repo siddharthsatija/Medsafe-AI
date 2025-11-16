@@ -1,5 +1,3 @@
-// api/chat.ts
-
 const apiKey = process.env.GEMINI_API_KEY as string | undefined;
 
 const GEMINI_URL =
@@ -7,94 +5,86 @@ const GEMINI_URL =
 
 type PathType = 'medicine' | 'lifestyle' | null;
 
+interface UploadedFile {
+  name: string;
+  type: string;
+  data: string; // base64 (no data: prefix)
+}
+
 function buildSystemPrompt(pathType: PathType) {
   const base = `
 You are "Medsafe", an empathetic health companion chatbot.
 
-SAFETY RULES:
+SAFETY RULES
 - Provide general educational information only.
-- You are NOT a doctor, do NOT diagnose, and do NOT prescribe for this specific user.
-- Never calculate a personalised dose based on weight, age, or history.
-- You may mention common over-the-counter (OTC) categories and typical schedules in general terms
-  (for example: "many adults take paracetamol every 4–6 hours as directed on the package"),
-  but always tell them to follow the package instructions and ask a doctor or pharmacist.
-- If the user asks "exactly what should I take / how many mg / how many times / after which meal",
-  kindly explain you cannot provide personalised instructions and they must talk to a real clinician.
+- You are not a doctor, do not diagnose, and do not prescribe.
+- Never give exact milligram doses or detailed personalised schedules.
+- You may mention that medicines are often taken every few hours "as directed on the package",
+  but always tell users to read the leaflet and speak with a doctor or pharmacist.
+- If the user asks for exact amounts, exact timing, or personalised instructions,
+  kindly explain you cannot provide that and they must talk to a clinician.
 
-EMERGENCIES AND SELF-HARM:
-- If they mention chest pain, difficulty breathing, stroke symptoms, severe bleeding,
-  confusion, seizures, or self-harm thoughts:
-  - Clearly say this may be an emergency.
-  - Advise them to seek urgent in-person help (emergency number, ER, crisis line, trusted adult).
-  - Keep the tone calm and supportive and avoid casual lifestyle or medicine suggestions.
+EMERGENCIES AND SELF-HARM
+- If you notice chest pain, severe breathing trouble, stroke signs, severe bleeding,
+  seizures, confusion, or self-harm thoughts:
+  - Say this may be an emergency.
+  - Advise them to seek urgent in-person help (emergency number, ER, urgent care, crisis line, or trusted adult).
+  - Keep the tone calm and supportive.
 
-STYLE RULES:
-- Very warm, calm, and reassuring.
+STYLE
+- Warm, calm, and reassuring.
 - Use short paragraphs.
-- Use **bold headings** like: **What You’re Experiencing & How to Support Recovery**
-- Use bullet lists with "- " (dash + space).
-- Do NOT use hashes (#, ##, ###) for headings.
-- Do NOT use "*" bullets.
-- Keep the answer concise but complete enough to be genuinely helpful.
-- Always end by reminding them this is general information and not a diagnosis or a substitute for professional care.
+- Use plain text headings on their own line, with no hashes (#) or asterisks (*).
+- Use simple dash bullets like "- " for lists.
+- Do not use markdown formatting, tables, or emoji.
+- End by reminding them this is general information and not a diagnosis.
 `;
 
   const medicine = `
-CONTEXT: User selected "Medicine Information".
+CONTEXT: The user selected Medicine Information.
 
-GOALS AND STRUCTURE:
-- Start with 1–2 empathetic sentences.
-- Then use this structure (headings must be bold):
+STRUCTURE YOUR ANSWER LIKE THIS (headings as plain text lines, no symbols around them):
 
-**What You’re Experiencing & How to Support Recovery**
-- Summarise their main symptoms, duration, meals, water intake, and any key context.
-- Briefly explain how improving meals, hydration, sleep, and rest can support recovery.
+What You Are Experiencing And How To Support Recovery
+- 2–4 short bullets summarising their symptoms, duration, and lifestyle context (meals, water, sleep).
+- Mention where they are doing something helpful (for example drinking water).
+- Gently suggest small improvements (for example more meals, more fluids, more rest).
 
-**Common Over-the-Counter Options**
-- Use 2–4 bullets for common categories used by many people for symptoms like theirs,
-  for example: paracetamol/acetaminophen, ibuprofen, simple cold-and-flu combinations, throat lozenges, etc.
-- Each bullet should be "Medicine/category – very short description of what it is usually used for".
+Common Over-The-Counter Options
+- 2–5 bullets listing general categories that many people use (for example paracetamol/acetaminophen, ibuprofen, antihistamines, throat lozenges), chosen to fit their symptoms.
+- For each bullet, mention it is a common option and that people must follow package instructions and ask a doctor or pharmacist if unsure.
 
-**How Each Option Helps & Typical Use**
-- Use bullets again, matching the options you mentioned above.
-- For each, explain:
-  - how it generally works,
-  - typical patterns like "often taken every 4–6 hours as directed on the package",
-  - whether people usually take it with food or not.
-- Keep it clearly general, not personalised instructions.
+How Each Option Helps And Typical Use
+- 2–5 bullets, one for each category above.
+- Explain in plain language what it helps with (for example "reduces fever and body pain").
+- You may say things like "often taken every 4–6 hours as directed on the package" but never mention exact mg numbers or maximum mg per day.
 
-**When to See a Doctor or Get Urgent Help**
-- Give 4–6 clear bullets with warning signs or red flags.
-- Include both:
-  - when to book a normal doctor appointment, and
-  - when to seek urgent or emergency care.
+When To See A Doctor Or Get Urgent Help
+- 3–6 bullets with clear warning signs (for example fever for several days, very high temperature, trouble breathing, chest pain, confusion, stiff neck, severe rash, severe pain, or anything that worries them).
+- Tell them to seek urgent or in-person care if any of these happen.
 
-- Finish with 1 short, encouraging sentence and the reminder that this is educational only.
+Always finish with one short line reminding them that this is general education and not a diagnosis or substitute for medical care.
 `;
 
   const lifestyle = `
-CONTEXT: User selected "Lifestyle Guidance".
+CONTEXT: The user selected Lifestyle Guidance.
 
-GOALS AND STRUCTURE:
-- Start with 1–2 empathetic sentences.
-- Then use this structure (headings must be bold):
+STRUCTURE YOUR ANSWER LIKE THIS:
 
-**Your Current Habits at a Glance**
-- Summarise their sleep, water intake, meals, stress, exercise, smoking, and alcohol in 3–5 short bullets.
+Your Current Habits At A Glance
+- 3–6 bullets summarising their sleep, water, meals, stress, exercise, smoking, and alcohol based on the form.
 
-**Small Changes That Could Help**
-- Give 4–6 small, realistic suggestions (hydration, sleep routine, gentle movement, stress tools, etc.).
-- Each bullet should be one clear behaviour change, not a big list.
+Small Changes You Can Start With
+- 4–8 bullets with specific but gentle suggestions (for example "aim for 2–3 small meals if you currently eat once", "add a 10–15 minute walk most days").
+- Keep each suggestion achievable and non-judgmental.
 
-**What You Might Notice Over Time**
-- 3–4 bullets describing approximate timelines like:
-  - "Many people notice a bit more energy after a few days of…"
-  - "Sleep often feels more settled after 1–2 weeks of…"
+What You Might Notice Over Time
+- 3–6 bullets describing realistic timelines such as "many people feel a bit more energy after a few days of better hydration" or "sleep improvements can take 1–2 weeks of a steady routine".
 
-**When to Talk to a Professional**
-- 3–5 bullets on when to see a doctor, counsellor, or other professional.
+When To Get Extra Support
+- 3–6 bullets describing when it would be helpful to talk to a doctor, therapist, or other professional (for example ongoing fatigue, low mood, very high stress, or existing medical conditions).
 
-- Finish with a short supportive message and reminder that this is not medical advice.
+Always end by saying this is general wellness guidance and does not replace personalised medical advice.
 `;
 
   if (pathType === 'medicine') return base + medicine;
@@ -107,9 +97,9 @@ function buildUserPrompt(options: {
   pathType: PathType;
   patientInfo: any;
   chatHistory: any[];
-  hasFile: boolean;
+  file?: UploadedFile | null;
 }) {
-  const { message, pathType, patientInfo, chatHistory, hasFile } = options;
+  const { message, pathType, patientInfo, chatHistory, file } = options;
 
   const historyText =
     chatHistory && chatHistory.length
@@ -118,15 +108,15 @@ function buildUserPrompt(options: {
           .join('\n')
       : 'No previous messages yet.';
 
-  const fileNote = hasFile
-    ? '\nThe user has also attached a file. Use any helpful information from that file when answering, but still follow the safety rules.\n'
-    : '';
+  const fileLine = file
+    ? `The user also uploaded a file named "${file.name}" of type "${file.type}". Use information from this file together with the text and form when helpful.`
+    : 'No file was uploaded for this message.';
 
   return `
-Previous conversation:
+Previous conversation
 ${historyText}
 
-Form information:
+Form information
 - Path type: ${pathType ?? 'unknown'}
 - Symptoms: ${patientInfo?.symptoms || 'not provided'}
 - Duration: ${patientInfo?.symptomDuration} ${patientInfo?.symptomUnit}
@@ -139,19 +129,22 @@ Form information:
 - Exercise frequency: ${patientInfo?.exerciseFrequency}
 - Smoking status: ${patientInfo?.smokingStatus}
 - Alcohol consumption: ${patientInfo?.alcoholConsumption}
-${fileNote}
-User's latest message:
-"${message || '[User only uploaded a file without extra text]'}"
 
-HOW TO RESPOND:
-- Speak as "Medsafe".
-- Use their symptoms/lifestyle context naturally.
-- Follow the required structure and headings for this path type.
-- Use "- " for bullets, no numbered lists unless needed.
-- Do NOT use hash symbols (#, ##, ###) or markdown headings.
-- Keep it empathetic, concise, and practical.
-- Do not provide personalised prescriptions or dosing instructions.
-- End with a reminder that this is general information and not a diagnosis or substitute for seeing a professional.
+File information
+- ${fileLine}
+
+User's latest message
+"${message}"
+
+HOW TO RESPOND
+- Speak as Medsafe in warm, plain language.
+- Use the form information and, if present, the uploaded file content as context.
+- Follow the requested section structure for the chosen path type.
+- Use headings as plain text lines with no hashes or asterisks.
+- Use dash bullets for lists.
+- Do not include emojis or markdown.
+- Do not give exact doses or personalised prescriptions.
+- Remind them at the end that this is general information and not a diagnosis.
 `;
 }
 
@@ -159,7 +152,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     res.status(200).json({
       ok: true,
-      message: 'GET /api/chat is working ✅',
+      message: 'GET /api/chat is working',
       hasApiKey: !!apiKey,
     });
     return;
@@ -173,25 +166,19 @@ export default async function handler(req: any, res: any) {
   if (!apiKey) {
     res.status(200).json({
       response:
-        '⚠️ Medsafe server configuration issue: GEMINI_API_KEY is not set or invalid in the Vercel Environment Variables. Please add it and redeploy.',
+        'Medsafe configuration issue: the GEMINI_API_KEY is not set in the server environment. Please add it in Vercel settings and redeploy.',
     });
     return;
   }
 
   try {
-    const {
-      message,
-      pathType,
-      patientInfo,
-      chatHistory,
-      file,
-    }: {
+    const { message, pathType, patientInfo, chatHistory, file } = req.body as {
       message: string;
       pathType: PathType;
       patientInfo: any;
       chatHistory: any[];
-      file?: { name: string; type: string; data: string } | null;
-    } = req.body;
+      file?: UploadedFile | null;
+    };
 
     const systemPrompt = buildSystemPrompt(pathType);
     const userPrompt = buildUserPrompt({
@@ -199,24 +186,19 @@ export default async function handler(req: any, res: any) {
       pathType,
       patientInfo,
       chatHistory: chatHistory || [],
-      hasFile: !!file && !!file.data,
+      file: file || null,
     });
 
-    const parts: any[] = [
-      { text: systemPrompt },
-    ];
+    const parts: any[] = [{ text: systemPrompt + '\n\n' + userPrompt }];
 
-    // If a file was uploaded, send it as inlineData so Gemini can read it
-    if (file && file.data) {
+    if (file && file.data && file.type) {
       parts.push({
         inlineData: {
-          mimeType: file.type || 'application/octet-stream',
+          mimeType: file.type,
           data: file.data,
         },
       });
     }
-
-    parts.push({ text: '\n\n' + userPrompt });
 
     const payload = {
       contents: [
@@ -237,7 +219,7 @@ export default async function handler(req: any, res: any) {
       const errorText = await response.text().catch(() => '');
       res.status(200).json({
         response:
-          '⚠️ I had a problem talking to the Gemini model, so I could not generate a full answer.\n\n' +
+          'I had a problem talking to the Gemini model, so I could not generate a full answer.\n\n' +
           `Technical details for the developer:\nHTTP ${response.status} ${response.statusText}\n` +
           errorText,
       });
@@ -246,23 +228,17 @@ export default async function handler(req: any, res: any) {
 
     const data = await response.json();
 
-    let text =
+    const text =
       data?.candidates?.[0]?.content?.parts
         ?.map((p: any) => p.text || '')
         .join('') || 'Sorry, I could not generate a response right now.';
-
-    // Light post-processing: strip leading "#" from any lines, just in case
-    text = text
-      .split('\n')
-      .map((line: string) => line.replace(/^#+\s*/, ''))
-      .join('\n');
 
     res.status(200).json({ response: text });
   } catch (error: any) {
     console.error('/api/chat Gemini error:', error);
     res.status(200).json({
       response:
-        '⚠️ I ran into an error while trying to talk to the Gemini model.\n\n' +
+        'I ran into an error while trying to talk to the Gemini model.\n\n' +
         'Technical details for the developer:\n' +
         (error?.message || String(error)),
     });
