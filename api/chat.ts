@@ -1,3 +1,5 @@
+// api/chat.ts
+
 const apiKey = process.env.GEMINI_API_KEY as string | undefined;
 
 const GEMINI_URL =
@@ -20,7 +22,7 @@ can support recovery.
 Provide general information only, not personal medical instructions.
 
 SAFETY RULES:
-You are NOT a doctor and do NOT provide diagnoses or prescriptions.
+You are NOT a a doctor and do NOT provide diagnoses or prescriptions.
 Never give exact personalised doses, frequencies, or schedules for this specific user.
 You may mention common over-the-counter (OTC) medicine categories in general terms
 (for example "paracetamol is often used for fever in adults"),
@@ -125,8 +127,9 @@ function buildUserPrompt(options: {
   pathType: PathType;
   patientInfo: any;
   chatHistory: any[];
+  hasFile: boolean;
 }) {
-  const { message, pathType, patientInfo, chatHistory } = options;
+  const { message, pathType, patientInfo, chatHistory, hasFile } = options;
 
   const hasHistory = !!(chatHistory && chatHistory.length);
 
@@ -150,6 +153,7 @@ Stress level: ${patientInfo?.stressLevel}
 Exercise frequency: ${patientInfo?.exerciseFrequency}
 Smoking status: ${patientInfo?.smokingStatus}
 Alcohol consumption: ${patientInfo?.alcoholConsumption}
+File attached: ${hasFile ? "yes" : "no"}
 `.trim();
 
   let taskText: string;
@@ -161,7 +165,9 @@ Alcohol consumption: ${patientInfo?.alcoholConsumption}
 FIRST ANSWER TASK (MEDICINE):
 The user is on the Medicine Information path and this is the first answer.
 
-Use the symptoms and form details above to personalise your explanation.
+Use the symptoms, lifestyle details, and any attached file contents to personalise your explanation.
+If a file is attached, treat it as an important source of context.
+
 Follow the four-section structure and formatting rules for medicine answers
 that are described in the system prompt.
 
@@ -180,7 +186,9 @@ Keep the whole answer concise but helpful (around 180–220 words).
 FIRST ANSWER TASK (LIFESTYLE):
 The user is on the Lifestyle Guidance path and this is the first answer.
 
-Use the symptoms and lifestyle details above (sleep, stress, water, exercise, smoking, alcohol).
+Use the symptoms, lifestyle details, and any attached file contents to personalise your explanation.
+If a file is attached, treat it as an important source of context.
+
 Follow the four-section structure and formatting rules for lifestyle answers
 that are described in the system prompt.
 
@@ -196,7 +204,7 @@ Keep the answer around 180–220 words.
     } else {
       taskText = `
 FIRST ANSWER TASK (UNKNOWN PATH):
-Path type is unknown. Use the symptoms and lifestyle information above
+Path type is unknown. Use the symptoms, lifestyle information, and any attached file
 to give safe, general guidance in four clear sections with Unicode bold headings,
 as described in the system prompt.
 `.trim();
@@ -214,7 +222,7 @@ Now they are asking a follow-up question or want more detail.
 How to respond now:
 Do NOT repeat the full four-section structure.
 Do NOT re-summarise everything unless absolutely necessary.
-Answer the user's latest message directly, referring back to earlier advice when helpful.
+Answer the user's latest message directly, referring back to earlier advice and any attached file when helpful.
 You may use 2–5 short bullet points (starting with "• ") or 1–2 short paragraphs.
 Keep it concise (about 60–120 words).
 `.trim();
@@ -227,7 +235,7 @@ Now they are asking a follow-up question or want more detail.
 How to respond now:
 Do NOT repeat the full four-section structure.
 Do NOT restate the entire lifestyle summary.
-Answer the user's latest message directly, with gentle, practical guidance.
+Answer the user's latest message directly, using any attached file as context if relevant.
 You may use 2–5 short bullet points (starting with "• ") or 1–2 short paragraphs.
 Keep it concise (about 60–120 words).
 `.trim();
@@ -252,9 +260,7 @@ ${commonFormText}
 
 User's latest message:
 "${message}"
-
-${taskText}
-`.trim();
+`.trim() + "\n\n" + taskText;
 }
 
 export default async function handler(req: any, res: any) {
@@ -283,12 +289,19 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { message, pathType, patientInfo, chatHistory } = req.body as {
+    const { message, pathType, patientInfo, chatHistory, file } = req.body as {
       message: string;
       pathType: PathType;
       patientInfo: any;
       chatHistory: any[];
+      file?: {
+        name: string;
+        type: string;
+        data: string; // base64 (no data: prefix)
+      } | null;
     };
+
+    const hasFile = !!(file && file.data);
 
     const systemPrompt = buildSystemPrompt(pathType);
     const userPrompt = buildUserPrompt({
@@ -296,13 +309,25 @@ export default async function handler(req: any, res: any) {
       pathType,
       patientInfo,
       chatHistory: chatHistory || [],
+      hasFile,
     });
+
+    const parts: any[] = [{ text: systemPrompt + "\n\n" + userPrompt }];
+
+    if (hasFile) {
+      parts.push({
+        inlineData: {
+          data: file!.data, // base64 string only
+          mimeType: file!.type || "application/octet-stream",
+        },
+      });
+    }
 
     const payload = {
       contents: [
         {
           role: "user",
-          parts: [{ text: systemPrompt + "\n\n" + userPrompt }],
+          parts,
         },
       ],
     };
