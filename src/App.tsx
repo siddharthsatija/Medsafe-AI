@@ -46,9 +46,13 @@ export default function App() {
   const [conversationContext, setConversationContext] = useState<any>({});
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // NEW: file upload state + ref for hidden input
+  // File upload state
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Speech-to-text state
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const [formData, setFormData] = useState<FormData>({
     symptoms: '',
@@ -103,8 +107,7 @@ export default function App() {
     return 'neutral';
   };
 
-  // This function is no longer used to generate the main reply,
-  // but we keep it in case you want local, non-Gemini responses later.
+  // (kept for possible local logic later)
   const generateEmpathicResponse = (userMessage: string, context: any): string => {
     const emotion = detectEmotionalTone(userMessage);
 
@@ -127,72 +130,60 @@ export default function App() {
 
     if (selectedOption === 'medicine') {
       if (!context.medicineExplained) {
-        response += '\n\n💊 Based on what you\'ve shared, let me explain some options that might help:\n\n';
+        response += '\n\nBased on what you have shared, here are some general options that might help.\n\n';
 
         if (
           formData.symptoms.toLowerCase().includes('fever') ||
           formData.symptoms.toLowerCase().includes('headache')
         ) {
           response +=
-            '**Paracetamol (Acetaminophen)** could be helpful here. It works by reducing fever and relieving mild to moderate pain. People commonly use it for viral fever, headaches, and body aches.\n\n';
-          response += '**How to use it safely:**\n';
-          response += '• Adults: 500-1000mg every 6 hours\n';
-          response += '• Maximum: 4000mg (4 grams) in 24 hours\n';
-          response += '• Take with water, with or without food\n\n';
+            'Paracetamol (acetaminophen) can help reduce fever and relieve mild to moderate pain. People often use it for viral fever, headaches, and body aches.\n\n';
           response +=
-            '**Expected timeline:** Most people start feeling relief within 30-60 minutes, and with rest, symptoms typically improve within 2-3 days. Full recovery usually takes 5-7 days for viral illnesses.\n\n';
+            'Most people start feeling relief within 30-60 minutes, and with rest, symptoms typically improve in a few days.\n\n';
         } else {
           response +=
-            "For your symptoms, over-the-counter options might help, depending on what you're experiencing. Could you tell me more about what's bothering you most?\n\n";
+            "For your symptoms, over-the-counter options might help, depending on what you're experiencing. Could you tell me more about what is bothering you most?\n\n";
         }
 
         response +=
-          '**Important reminder:** This information is for educational purposes only. If symptoms persist beyond 3-4 days, worsen, or you have any concerns, please consult a healthcare professional for personalized advice. 🌿';
+          'Important reminder: this information is for education only. If symptoms last beyond a few days, worsen, or you have any concerns, please speak with a healthcare professional.';
 
         setConversationContext({ ...context, medicineExplained: true });
       } else {
-        response += "That's a smart question! " + getFollowUpMedicineResponse(userMessage, context);
+        response += "That is a good question. " + getFollowUpMedicineResponse(userMessage, context);
       }
     } else if (selectedOption === 'lifestyle') {
       if (!context.lifestyleAdviceGiven) {
-        response += '\n\n🌿 Let me share some practical lifestyle changes that can help:\n\n';
+        response += '\n\nHere are some practical lifestyle changes that can help:\n\n';
 
-        response += '**Hydration** 💧\n';
-        response += `Your current intake: ${formData.waterIntake}L per day. `;
+        response += 'Hydration:\n';
+        response += `Your current intake is about ${formData.waterIntake} litres per day. `;
         if (formData.waterIntake < 2) {
           response +=
-            'Try gradually increasing to 2-3L daily. This helps with fatigue, headaches, and overall energy.\n';
-          response +=
-            '**Expected result:** You should notice improved focus and reduced fatigue within 2-3 days.\n\n';
+            'Gradually increasing to around 2–3 litres daily can help with fatigue, headaches, and overall energy.\n';
         } else {
-          response += "That's great! You're staying well hydrated. 👏\n\n";
+          response += "You are already staying well hydrated, which is great.\n";
         }
 
-        response += '**Sleep** 😴\n';
-        response += `Current: ${formData.sleepHours} hours. `;
+        response += '\nSleep:\n';
+        response += `You sleep about ${formData.sleepHours} hours per night. `;
         if (formData.sleepHours < 7) {
-          response += 'Aim for 7-9 hours per night. Good sleep boosts immunity and mood.\n';
-          response +=
-            '**Expected result:** Within a week, you\'ll likely feel more energized and resilient.\n\n';
+          response += 'Aim for 7–9 hours each night. Good sleep supports immunity and mood.\n';
         } else {
-          response += "That's a healthy amount! Keep it up. 👏\n\n";
+          response += 'That is a healthy amount of sleep. Try to keep a steady routine.\n';
         }
 
-        response += '**Exercise** 🏃\n';
+        response += '\nExercise:\n';
         if (
           formData.exerciseFrequency === 'never' ||
           formData.exerciseFrequency === 'rarely'
         ) {
           response +=
-            'Starting with just 15-20 minutes of light walking daily can significantly improve your energy and mood.\n';
-          response +=
-            '**Expected result:** You\'ll start feeling more energetic within 3-5 days.\n\n';
+            'Starting with 15–20 minutes of light walking most days can noticeably boost energy and mood over time.\n';
         }
 
         response +=
-          '**Remember:** Small, consistent changes work better than big sudden shifts. You\'re doing great by paying attention to your health! 💚\n\n';
-        response +=
-          '*This guidance is educational. For persistent concerns, please consult a healthcare provider.*';
+          '\nRemember: small, consistent steps usually work better than big sudden changes. This is general guidance, so please talk with a healthcare provider for any medical issues.';
 
         setConversationContext({ ...context, lifestyleAdviceGiven: true });
       } else {
@@ -207,39 +198,87 @@ export default function App() {
     const lowerMsg = message.toLowerCase();
 
     if (lowerMsg.includes('side effect')) {
-      return 'Common side effects of Paracetamol are rare but can include nausea or allergic reactions. The most important thing is never to exceed the maximum dose (4g/day) as it can harm your liver. If you notice anything unusual, stop taking it and consult a doctor. You\'re being smart by asking! 👍';
+      return 'Common medicines for fever and pain can sometimes cause stomach upset, allergic reactions, or other side effects. Always read the package leaflet carefully, follow the directions, and speak with a doctor or pharmacist if you notice anything unusual.';
     }
 
     if (lowerMsg.includes('how long') || lowerMsg.includes('when')) {
-      return 'Most people feel relief within 30-60 minutes of taking the medication. For full recovery from your symptoms, it typically takes 5-7 days with proper rest and care. Keep monitoring how you feel! 🌟';
+      return 'Many people start to feel some relief within about 30–60 minutes after taking fever or pain relief medicines, but full recovery from an illness can take several days. Rest, fluids, and nutrition are just as important as medicine.';
     }
 
     if (lowerMsg.includes('alternative') || lowerMsg.includes('natural')) {
-      return 'Natural alternatives include: rest (your body heals during sleep), staying hydrated (helps flush out toxins), and warm compress for aches. Ginger tea can help with nausea. These work well alongside or instead of medication for mild symptoms. You\'re taking wonderful care of yourself! 💚';
+      return 'Gentle home care can also help: resting, staying hydrated, using warm soups or teas, and light clothing or a cool compress for fever. These approaches can support your body alongside any medicine your doctor or pharmacist recommends.';
     }
 
-    return "That's a great question. I want to make sure I give you accurate information. For specific concerns about medications, it's best to check with a pharmacist or doctor who can consider your full health picture. Is there anything else about general wellness I can help with? 😊";
+    return 'For detailed questions about a specific medicine, dose, or schedule, it is safest to ask a pharmacist or doctor who knows your full health history. I can keep helping with general guidance if you like.';
   };
 
   const getFollowUpLifestyleResponse = (message: string, context: any): string => {
     const lowerMsg = message.toLowerCase();
 
     if (lowerMsg.includes('sleep') || lowerMsg.includes('insomnia')) {
-      return 'For better sleep: avoid screens 1 hour before bed, keep your room cool and dark, and try to go to bed at the same time each night. Chamomile tea or light stretching can help you wind down. Most people see improvements within 3-5 days of consistent routine. You\'ve got this! 😴✨';
+      return 'For better sleep, try keeping a regular bedtime, limiting screens for an hour before bed, and keeping your room dark and cool. Many people notice some improvement after a few nights of a consistent routine.';
     }
 
     if (lowerMsg.includes('stress') || lowerMsg.includes('anxious')) {
-      return 'Managing stress is so important. Try: 5-minute breathing exercises (inhale 4 counts, hold 4, exhale 4), short walks outdoors, or journaling your thoughts. Even 10 minutes daily can reduce stress significantly. You should feel calmer within a week. You\'re doing great by addressing this! 🌿';
+      return 'Short breathing exercises, light movement like walking, and taking short breaks away from screens can help with stress. Even 10 minutes a day of something calming can make a difference over time.';
     }
 
     if (lowerMsg.includes('diet') || lowerMsg.includes('food')) {
-      return 'Focus on whole foods: fruits, vegetables, lean proteins, and whole grains. Eat regular meals (3 balanced meals or 5 small ones). Avoid excessive caffeine and sugar as they can affect energy and mood. You\'ll likely notice better energy within 3-4 days. That\'s a smart focus! 🥗';
+      return 'Focusing on regular meals with fruits, vegetables, whole grains, and protein can support energy and mood. Reducing very sugary drinks and heavy late-night meals may also help you feel better day to day.';
     }
 
-    return "That's a thoughtful approach! Keep making small, consistent changes. Remember, progress isn't always linear, and every small step counts. Would you like tips on any specific area of your wellness? 💪😊";
+    return 'Small lifestyle changes build up over time. If you tell me which area you want to focus on most, I can share more specific general suggestions.';
   };
 
-  // NEW: helper to convert File → base64 string (without the data: prefix)
+  // ---- Speech-to-text handler ----
+  const handleMicClick = () => {
+    // Second click stops listening
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please try Chrome or Edge.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      transcript = transcript.trim();
+      if (transcript) {
+        setChatInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+    setIsListening(true);
+  };
+
+  // ---- File → base64 helper ----
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -257,16 +296,14 @@ export default function App() {
     });
   };
 
-  // NEW: Start the conversation by sending form data to Gemini
+  // Start conversation with Gemini using form data
   const startChatWithGemini = async (mode: 'medicine' | 'lifestyle') => {
-    // Save context so we can reuse it later
     setConversationContext((prev: any) => ({
       ...prev,
       pathType: mode,
       patientInfo: formData,
     }));
 
-    // Navigate to chatbot and show loader
     setCurrentStep('chatbot');
     setChatMessages([]);
     setIsLoading(true);
@@ -279,9 +316,9 @@ Please:
 1) Greet them warmly and acknowledge how they might be feeling.
 2) Summarise their symptoms and how long they have been present.
 3) Explain what types of over-the-counter medicines are commonly used in general for these symptoms, how they work, and typical onset times.
-4) Suggest simple home-care steps (fluids, rest, light clothing, etc.).
+4) Suggest simple home-care steps such as fluids, rest, and light clothing.
 5) List warning signs when they should seek urgent or in-person medical care.
-6) Remind them to always read the package instructions carefully and consult a doctor or pharmacist before taking any medicine if they are unsure.`
+6) Remind them to always read medicine package instructions and talk to a doctor or pharmacist if unsure.`
           : `The user has just filled a lifestyle and wellness questionnaire.
 Please:
 1) Summarise their current habits (sleep, water intake, meals, stress, exercise, smoking, alcohol).
@@ -340,20 +377,16 @@ Please:
     }
   };
 
-  // UPDATED: use startChatWithGemini for the medicine path
   const handleNext = () => {
     if (currentStep === 'patient-info' && selectedOption) {
       if (selectedOption === 'medicine') {
-        // Directly start the chat with Gemini, using all current form data
         startChatWithGemini('medicine');
       } else if (selectedOption === 'lifestyle') {
-        // Ask the extra lifestyle questions first
         setCurrentStep('lifestyle');
       }
     }
   };
 
-  // UPDATED: lifestyle path also starts Gemini chat with full info
   const handleContinueToChatbot = () => {
     startChatWithGemini('lifestyle');
   };
@@ -374,16 +407,14 @@ Please:
     }
   };
 
-  // UPDATED: now supports sending a file + text together
+  // Send message (text + optional file)
   const handleSendMessage = async () => {
     if (chatInput.trim() === '' && !attachedFile) return;
 
+    const displayText = chatInput.trim() || (attachedFile ? '[File uploaded]' : '');
     const newMessages: ChatMessage[] = [
       ...chatMessages,
-      {
-        role: 'user',
-        message: chatInput.trim() || '[File uploaded]',
-      },
+      { role: 'user', message: displayText },
     ];
     setChatMessages(newMessages);
 
@@ -663,28 +694,28 @@ Please:
 
               <div className="flex gap-2 items-center">
                 <button
-                  className={`p-2 border rounded-lg ${
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-2 border rounded-lg flex items-center justify-center ${
                     selectedOption === 'medicine'
                       ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
                       : 'border-teal-300 text-teal-600 hover:bg-teal-50'
                   }`}
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
                 <button
-                  className={`p-2 border rounded-lg ${
+                  type="button"
+                  onClick={handleMicClick}
+                  className={`p-2 border rounded-lg flex items-center justify-center ${
                     selectedOption === 'medicine'
                       ? 'border-blue-300 text-blue-600 hover:bg-blue-50'
                       : 'border-teal-300 text-teal-600 hover:bg-teal-50'
-                  }`}
-                  type="button"
+                  } ${isListening ? 'bg-blue-50' : ''}`}
                 >
-                  <Mic className="w-5 h-5" />
+                  <Mic className={`w-5 h-5 ${isListening ? 'animate-pulse' : ''}`} />
                 </button>
 
-                {/* optional: show file name when attached */}
                 {attachedFile && (
                   <span className="text-xs text-gray-500 max-w-[140px] truncate">
                     {attachedFile.name}
