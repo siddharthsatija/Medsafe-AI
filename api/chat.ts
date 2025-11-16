@@ -70,7 +70,15 @@ Always finish with one short line reminding them that this is general education 
   const lifestyle = `
 CONTEXT: The user selected Lifestyle Guidance.
 
-FOR THE FIRST, COMPREHENSIVE ANSWER, STRUCTURE YOUR RESPONSE LIKE THIS:
+CORE BEHAVIOUR
+- Generate a friendly, supportive lifestyle guidance summary based on the user's health inputs:
+  sleep hours, exercise frequency, smoking/alcohol status, water intake, stress level, and meals per day.
+- Keep the tone simple, helpful, and recovery-focused.
+- In this Lifestyle Guidance mode, do NOT suggest or name any medicines or over-the-counter drugs.
+- Focus only on non-medicine strategies such as sleep, posture, movement, stretching, hydration, meals, stress management, and general daily habits.
+- If the user asks you to "give something" for pain or symptoms, explain kindly that you cannot recommend medicines here and encourage them to speak with a doctor or pharmacist for medication advice, while still offering lifestyle-based tips.
+
+FOR THE FIRST, COMPREHENSIVE ANSWER, YOU MAY USE THIS STRUCTURE (OPTIONAL, ONLY IF IT FEELS NATURAL):
 
 Your Current Habits At A Glance
 - 3–6 bullets summarising their sleep, water, meals, stress, exercise, smoking, and alcohol based on the form.
@@ -115,14 +123,13 @@ function buildUserPrompt(options: {
     ? `The user also uploaded a file named "${file.name}" of type "${file.type}". Use information from this file together with the text and form when helpful.`
     : 'No file was uploaded for this message.';
 
-  // Extra behaviour instructions for follow-up turns
   const followUpInstructions = hasHistory
     ? `
 FOLLOW-UP BEHAVIOUR
 - This is a follow-up question, not the first response.
 - Do NOT repeat your entire previous explanation or all sections again.
 - Do NOT regenerate the full "Your Current Habits At A Glance" or "Small Changes You Can Start With" blocks unless the user clearly asks you to repeat them.
-- Briefly refer to earlier points only if it helps (for example "earlier we talked about your sleep"), then focus on answering the new question.
+- Briefly refer to earlier points only if it helps, then focus on answering the new question.
 - Keep follow-up replies shorter: usually 2–5 dash bullets OR 1–2 short paragraphs.
 - Answer only what the user is asking now, using their previous context when helpful.
 `
@@ -155,7 +162,7 @@ User's latest message
 HOW TO RESPOND
 - Speak as Medsafe in warm, plain language.
 - Use the form information and, if present, the uploaded file content as context.
-- For the first main answer in this conversation, follow the requested section structure for the chosen path type.
+- For the first main answer in this conversation, follow the requested behaviour for the chosen path type.
 - Use headings as plain text lines with no hashes or asterisks.
 - Use dash bullets for lists.
 - Do not include emojis or markdown.
