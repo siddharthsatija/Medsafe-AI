@@ -1232,7 +1232,7 @@ Please:
                 selectedOption === 'medicine' ? 'text-blue-100' : 'text-blue-600'
               }`}
             >
-              Add medication details
+              Select to explore Medicine Information
             </p>
           </button>
 
